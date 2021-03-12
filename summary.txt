@@ -1,0 +1,238 @@
+I. Introduction
+
+          --- Characterizing the energy of communication factors: ---
+
+        1) Application determines how many bytes
+        are in a packet and at what rate they are being sent. The
+        latter depends, among others, on the propagation conditions.
+
+        2) Number of devices in the network effects the
+        energy consumption, i.e., increasing traffic eventually will
+        cause more collisions.
+
+        3) Position of the devices and the state of
+        the communication channel, which determines the path loss and noise.
+
+        4) Communication protocol and radio hardware determine
+        how long the radio is active and at what power.
+
+                              --- Improvements: ---
+
+       1) Adaptive Data Rate (ADR) and downlink messages have been included [6][7]
+
+       2) Payload size and packet rate can now be changed to correspond
+          with real-life applications, whereas this was fixed in prior work [8]
+
+       3) Energy consumption corresponding to the IoT nodes are based on
+          measurements from a power-optimized node [9].
+
+II. LPWAN ASSESSMENT - LORA AND LORAWAN
+
+
+                             --- LoRa PHY scheme: ---
+        LoRa, short for Long Range, is a proprietary modulation technique developed by Cycleo; later
+        acquired by Semtech. The modulation technique is based on
+        Chirp Spread Spectrum (CSS). LoRa encodes information by means of chirps.
+        A chirp is a sinusoidal signal whose frequency monotonically increases (upchirp) or
+        decreases (downchirp). The symbol duration is based on the
+        spreading factor (SF) and the bandwidth (BW).
+        Each LoRa symbol is composed of 2^SF chirps each covering the entire
+        bandwidth. The symbol duration of a LoRa symbol is defined as:
+
+                                    !!!
+
+        A LoRa message consists of a preamble and data.
+        The preamble contains only upchirps while the data part comprises upchirps with discontinuities.
+        The position of the discontinuities -in frequency- is what encodes the transmitted information.
+        To ensure that multiple packets can be demodulated concurrently, LoRa packets can be encoded with different
+        orthogonal spreading factors.
+
+                            --- LoRaWAN MAC scheme: ---
+
+        LoRaWAN defines the multiple access control (MAC) layer and the network architecture.
+        Opposed to the proprietary modulation technique LoRa, LoRaWAN is an open
+        standard specified by the LoRa Alliance.
+
+        LoRaWAN defines three device classes each targeting different use cases.
+
+        LoRa devices initiate communication by means of transmitting a message to the gateway. By means of confirmed
+        messages, the nodes can request acknowledgments to ensure that the packets are successfully received by the gateway.
+        After an uplink message, the node opens two slots to receive downlink traffic from the gateway.
+
+        LoRaWAN mandates that each LoRa device implements this scheme:
+        The compliant devices are called class A devices.
+        Class B and C devices extend the communication capabilities
+        of class A devices by defining additional receive slots. Class
+        B devices have periodic receive slots while class C devices
+        continuously listen for incoming messages.
+
+                        --- Governable parameters: ---
+
+        LoRaWAN facilitates controlling the airtime, data rate and energy consumption of
+        LoRa nodes in order to optimize the overall energy consumption of the network.
+
+        This is done by adapting the data rate and transmission power to the propagation characteristics of the
+        LoRa link. Increasing the spreading factor results in a higher
+        airtime, which allows the receiver to better demodulate the
+        message. Despite the better range, a node will consume more
+        power when transmitting with a higher spreading factor. In
+        addition to modifying the spreading factor, the transmission
+        power can be altered to further increase the range or decrease
+        the energy consumption.
+
+        LoRaWAN devices need to comply with the regulations
+        imposed in the industrial, scientific and medical (ISM) radio
+        bands in which they operate. These regulations include a
+        limitation in the duty cycle of transmissions and excited
+        transmit power. Concretely, LoRaWAN enforces a per band
+        duty-cycle limitation. After transmitting a message, the node
+        needs to wait T_{off} seconds before transmitting again in that
+        band. Considering the case of sending a message
+        with a payload size of 51 bytes and a spreading factor of 12
+        and respecting a duty cycle limit of 1%, the time off is 4
+        minutes.
+
+                                    !!!
+
+III. CROSS-LAYER ASSESSMENT FRAMEWORK
+
+        The presented cross-layer simulator (Fig. 1) provides a
+        generic framework to evaluate and co-optimize PHY, MAC
+        and network parameters under realistic conditions.
+
+        In the framework, each class A Node sends LoRa packets to the
+        Air Interface where collision, propagation, and SNR models
+        operate on the messages in progress. Finally, the Gateway
+        receives and processes the packets. In the case of confirmed
+        messages, the gateway will transmit a message in the downlink
+        to the corresponding node to acknowledge the received uplink
+        message.
+
+                          --- Nodes ---
+
+        Each node is characterized by an energy profile, a set of
+        LoRa parameters and a location. The simulator is not constrained to one energy profile.
+        Different distinct profiles can be allocated to nodes, mimicking
+        various nodes.
+
+        Other power states are taken into account besides transmit, receive
+        and sleep. First, simple processing (state 2) is simulated.
+        Secondly, the states prior to transmitting and receiving (state 6)
+        are related to waking-up and setting up the radio. Finally,
+        after receiving a downlink message, the downlink message
+        is processed and the MAC-related functionality is executed (state 9).
+
+        The behavior of the node is designed as specified by
+        Semtech [12]–[14] and their LoRaWAN node implementation.2
+        In spite of the openness of the LoRaWAN MAC
+        protocol, not all LoRa-specific documents are publicly accessible.
+
+        The network operator can, to some extent,
+        freely define the network’s behavior. In our assessment, this
+        functionality is based on the open-source implementation of
+        The Things Network.3
+
+        In order to optimize the energy budget of LoRa class
+        A nodes, a downlink message can only be received after
+        transmitting an uplink message. Hence, the LoRa nodes only
+        need to listen to incoming messages at specific times. As
+        previously mentioned, Class A LoRaWAN devices [1] utilize
+        two receive windows.
+
+        The data rate and center frequency of the downlink messages
+        depends on the used receive window, the data rate and center frequency of the uplink message.
+
+        By default, the downlink message scheduled for the first receive
+        window (RX 1) uses the same frequency and data rate as
+        the uplink message. In the second receive window (RX 2),
+        a fixed predefined frequency and data rate are being used.
+
+        In the case a downlink message was received in RX 1,
+        the node will not use the second receive slot.
+
+        In RX 2, Semtech defines a spreading factor of 12 while in
+        our assessment we prefer the SF9 as proposed by The Things
+        Network. As a lower spreading factor is favored because the
+        base station can transmitted with higher power. The lower
+        spreading factor results in a faster reception, which in turn
+        yields a lower energy consumption at the node. A channel
+        frequency of 868.525 MHz was selected for RX 2; conform
+        to The Things Network.
+
+        The channel frequency of the uplink packets are selected
+        on basis of the channel availability. The end-device chooses
+        a channel with the lowest Toff (Eq. 2). The device respects
+        the duty cycle regulations and waits to transmit a message if
+        the required Toff is not satisfied. A default transmission rate
+        (λ) of 0.02 bits per second is chosen which is equivalent to
+        transmitting a 9 byte message every hour.
+
+                          --- Air Interface ---
+
+        The air interface includes three main components. First,
+        the propagation channel introduces a path loss. Secondly, a
+        simple SNR model is provided to translate the Received Signal
+        Strength (RSS) to an SNR value. Finally, a collision model
+        determines the collided packets, which occurs particularly in
+        the uplink in a typical LPWAN case.
+
+        1) Propagation Model: Currently, the framework features
+           two channel models. First, a log-distance channel model with
+           shadowing is provided, where the path loss is characterized
+           by:
+
+                                    !!!
+
+           An additional path loss can be included in the log-distance
+           model to simulate indoor positioned nodes and gateways to
+           accommodate for the additional path loss [16] due to the
+           penetration of a building. Secondly, a COST 231 model [17]
+           implementation can be used to model specific scenarios.
+
+           2) SNR Model: The current version of the simulator takes
+           into account the noise floor, as described in [12]. In future
+           extensions more complex models can be included and interference could be added.
+
+           3) Collision Model: The collision model considers the center frequency,
+           spreading factor, timing and power to determine whether packets collide.
+           The model is based on the findings reported in [6].
+           Due to the orthogonality of the specified spreading factors,
+           two messages encoded with different spreading factors can be demodulated concurrently without colliding
+
+                          --- Gateway ---
+
+        This LoRa concentrator is able to
+        receive up to eight packets simultaneously sent with different
+        spreading factors on different channels. A message can be
+        received by the gateway if it has not collided and the signal
+        strength is higher than the sensitivity of the gateway [18],
+        [19].
+
+        After demodulating the received message, the network
+        executes Adaptive Data Rate (ADR) –if enabled– following
+        a mechanism inspired by the implementation of The Things
+        Network.4 According to the ADR specification, the network is
+        capable of increasing the data rate and changing the transmit
+        power of the node, while the nodes can only decrease their data
+        rate.
+
+        This can result in a low power transmit trap where nodes
+        are no longer capable of communicating with the gateway [4].
+        Depending on the MAC LoRaWAN parameters of the uplink
+        message, the gateway responds with a downlink message. We
+        currently assume that every scheduled downlink message will
+        be received by the end-device considering gateways have a
+        higher permitted transmit power.
+
+        The gateway will first try to schedule a message in the receive slot which requires
+        less energy. For instance, if a message with SF12 was sent,
+        the gateway will try to schedule a downlink message on the
+        second receive slot with SF9 opposed to the first receive slot
+        with SF12, in order to save significant air time, and hence,
+        energy. We measured an energy gain of four when utilizing this
+        approach compared to using the first receive slot. This is one
+        of the cross-layer energy optimizations already implemented
+        in present networks.
+
+
+

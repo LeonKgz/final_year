@@ -1,7 +1,6 @@
 import math
 
 import numpy as np
-import AirInterface
 
 class SINRModel:
     def __init__(self):
@@ -13,10 +12,9 @@ class SINRModel:
         self.noise_floor = -174 + 10 * np.log10(125e3)
 
     def rss_to_sinr(self, rss: float, total_power):
-        noise_term = 0.0
-        # print(f"rss == {rss}")
-        # print(f"total == {total_power}")
-        return rss / ((total_power) + self.noise_floor)
+        sinr_db = rss - 10 * np.log10(10 ** (total_power / 10) + 10 ** (self.noise_floor / 10))
+        sinr = 10 ** (sinr_db / 10)
+        return sinr
 
     def sinr_to_throughput(self, sinr: float):
         return math.log(sinr + 1, 2)

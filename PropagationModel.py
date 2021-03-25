@@ -20,7 +20,6 @@ class LogShadow:
             Lpl = 0
         return tp_dBm - self.GL - Lpl
 
-
 class COST231:
 
     def __init__(self, fc, W=None, b=None, hr=None, hm=2, phi=None, hb=15, metropolitan_center=True):

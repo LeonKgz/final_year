@@ -192,8 +192,8 @@ class AirInterface:
         packet.rss = rss
         snr = self.snr_model.rss_to_snr(rss)
         packet.snr = snr
-
-        sinr = self.sinr_model.rss_to_sinr(rss, sum(filter(lambda x: x < rss, map(lambda x: x.rss, self.packages_in_air))))
+        # TODO remove users from other channels
+        sinr = self.sinr_model.rss_to_sinr(rss, sum(filter(lambda x: x < rss, map(lambda x: x.rss, filter(lambda x: x.lora_param.freq == packet.lora_param.freq, self.packages_in_air)))))
         packet.sinr = sinr
 
         self.prop_measurements[node_id]['time'].append(self.env.now)

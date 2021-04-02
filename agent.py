@@ -1,17 +1,70 @@
+from LoRaParameters import LoRaParameters
+
+import numpy as np
 import torch
 
-import Node
+# Reinforcement Learning Agent section
+class LearningAgent:
 
+    def __init__(self):
 
+        self.nodes = None
 
-class DQN:
-
-    # The class initialisation function.
-    def __init__(self, node: Node, gamma=0.1):
         # Create a Q-network, which predicts the q-value for a particular state.
-        self.q_network = Network(input=5, output=15)
+        self.q_network = Network(input_dimensions=8, output_dimensions=90)
+        self.index_to_action = []
+        self.action_to_index = {}
+        curr_idx = 0
+        for tp in LoRaParameters.TRANSMISSION_POWERS:
+            for sf in LoRaParameters.SPREADING_FACTORS:
+                for ch in LoRaParameters.DEFAULT_CHANNELS:
+                    tensor = torch.tensor([tp, sf, ch])
+                    self.index_to_action.append(tensor)
+                    self.action_to_index[tensor] = curr_idx
+                    curr_idx += 1
+
         # Define the optimiser which is used when updating the Q-network. The learning rate determines how big each gradient step is during backpropagation.
         self.optimiser = torch.optim.Adam(self.q_network.parameters(), lr=0.001)
+        self.action_size = 90
+        self.gamma = 0.1
+        self.epsilon = 0.5
+
+    def assign_nodes(self, nodes):
+        self.nodes = nodes
+        for node in nodes:
+            node.assign_learning_agent(agent=self)
+
+    def choose_next_action(self, curr_s):
+        # curr_s = self.current_s()
+        output = self.q_network(curr_s)
+        max_action = torch.max(output)
+        pi = []
+        max_found = False
+        for a in output:
+            if (a == max_action and not max_found):
+                pi.append(1 - self.epsilon + (self.epsilon / self.action_size))
+                max_found = True
+            else:
+                pi.append(self.epsilon / self.action_size)
+
+        pi[-1] = 1 - sum(pi[:-1])
+
+        if (pi[-1] < 0):
+            print(f"Last value is negative: {pi[-1]}")
+            pi[-1] = 0
+            # TODO catch Value errors for weird pi values and report them
+
+        try:
+            selected_value = np.random.choice(output.detach().numpy(), p=pi)
+        except ValueError:
+            print("Problem with the pi values!")
+            exit(-1)
+
+        ret = self.index_to_action[output.detach().numpy().tolist().index(selected_value)]
+        return ret
+
+    # def take_action(self, a):
+    #     map(lambda node: node.take_action(a), self.nodes)
 
     # Function that is called whenever we want to train the Q-network. Each call to this function takes in a transition tuple containing the data we use to update the Q-network.
     def train_q_network(self, transition):
@@ -27,70 +80,28 @@ class DQN:
         return loss.item()
 
     # Function to calculate the loss for a particular transition.
-    # transition = (s, a, s', a')
+    # transition = (s, a, r, s')
     def _calculate_loss(self, transition):
-        s, a, next_s, next_a = transition
-        reward = self.node.compute_reward(self.node)
-        target = reward + self.gamma * torch.max()
-        predicted = None
-        torch.nn.MSELoss()(reward, predicted)
+        s, a, reward, next_s = transition
+        target = reward + self.gamma * torch.max(self.q_network(next_s))
+        # is_it = a in self.index_to_action
+        # print(is_it)
+        predicted = self.q_network(s)
+        predicted = predicted[self.action_to_index[a]]
+        loss = torch.nn.MSELoss()
+        return loss(target, predicted)
 
-class Agent:
+class Network(torch.nn.Module):
 
-    # The class initialisation function.
-    def __init__(self, environment):
-        # Set the agent's environment.
-        self.environment = environment
-        # Create the agent's current state
-        self.state = None
-        # Create the agent's total reward for the current episode.
-        self.total_reward = None
-        # Reset the agent.
-        self.reset()
+    def __init__(self, input_dimensions, output_dimensions):
+        super(Network, self).__init__()
+        self.network = torch.nn.Sequential(
+            torch.nn.Linear(in_features=input_dimensions, out_features=100),
+            torch.nn.ReLU(),
+            torch.nn.Linear(in_features=100, out_features=100),
+            torch.nn.ReLU(),
+            torch.nn.Linear(in_features=100, out_features=output_dimensions)
+        )
 
-    # Function to reset the environment, and set the agent to its initial state. This should be done at the start of every episode.
-    def reset(self):
-        # Reset the environment for the start of the new episode, and set the agent's state to the initial state as defined by the environment.
-        self.state = self.environment.reset()
-        # Set the agent's total reward for this episode to zero.
-        self.total_reward = 0.0
-
-    # Function to make the agent take one step in the environment.
-    def step(self):
-        # Choose the next action.
-        discrete_action = self._choose_next_action()
-        # Convert the discrete action into a continuous action.
-        continuous_action = self._discrete_action_to_continuous(discrete_action)
-        # Take one step in the environment, using this continuous action, based on the agent's current state. This returns the next state, and the new distance to the goal from this new state. It also draws the environment, if display=True was set when creating the environment object..
-        next_state, distance_to_goal = self.environment.step(self.state, continuous_action)
-        # Compute the reward for this paction.
-        reward = self._compute_reward(distance_to_goal)
-        # Create a transition tuple for this step.
-        transition = (self.state, discrete_action, reward, next_state)
-        # Set the agent's state for the next step, as the next state from this step
-        self.state = next_state
-        # Update the agent's reward for this episode
-        self.total_reward += reward
-        # Return the transition
-        return transition
-
-    # Function for the agent to choose its next action
-    def _choose_next_action(self):
-        # Return discrete action 0
-        return 0
-
-    # Function to convert discrete action (as used by a DQN) to a continuous action (as used by the environment).
-    def _discrete_action_to_continuous(self, discrete_action):
-        if discrete_action == 0:
-            # Move 0.1 to the right, and 0 upwards
-            continuous_action = np.array([0.1, 0], dtype=np.float32)
-        return continuous_action
-
-    # Function for the agent to compute its reward. In this example, the reward is based on the agent's distance to the goal after the agent takes an action.
-    def _compute_reward(self, distance_to_goal):
-        reward = float(0.1 * (1 - distance_to_goal))
-        reward = None #TODO
-        return reward
-
-    def take_action(self, transmission_power):
-        return None
+    def forward(self, input):
+        return self.network(input)

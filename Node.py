@@ -2,7 +2,9 @@ from enum import Enum, auto
 
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 
+from agent import LearningAgent
 from EnergyProfile import EnergyProfile
 from Gateway import Gateway
 from Global import Config
@@ -15,8 +17,6 @@ from copy import deepcopy
 
 from Location import Location
 import pandas as pd
-
-import torch
 
 class NodeState(Enum):
     OFFLINE = auto()
@@ -32,13 +32,14 @@ class NodeState(Enum):
 
 
 class Node:
-    def __init__(self, node_id, energy_profile: EnergyProfile, lora_parameters, sleep_time, process_time, adr, training, testing,location,
+    def __init__(self, node_id, energy_profile: EnergyProfile, lora_parameters, sleep_time, process_time, adr, location,
                  base_station: Gateway, env, payload_size, air_interface, confirmed_messages=True, tradeoff = 0.5):
 
         self.num_tx_state_changes = 0
         self.total_wait_time_because_dc = 0
         self.num_no_downlink = 0
         self.num_unique_packets_sent = 0
+        self.num_packets_received = 0
         self.start_device_active = 0
         self.num_collided = 0
         self.num_retransmission = 0
@@ -93,24 +94,14 @@ class Node:
         # SINR threshold with sub bandwidth 125 kHz from Lina's paper
         self.sinr_table = {7: "-7.5", 8: "-10", 9: "-12.5", 10: "-15", 11: "-18", 12: "-21"}
 
-        # Create a Q-network, which predicts the q-value for a particular state.
-        self.q_network = Network(input_dimensions=6, output_dimensions=90)
-        self.index_to_action = []
-        self.action_to_index = {}
-        curr_idx = 0
-        for tp in LoRaParameters.TRANSMISSION_POWERS:
-            for sf in LoRaParameters.SPREADING_FACTORS:
-                for ch in LoRaParameters.DEFAULT_CHANNELS:
-                    tensor = torch.tensor([tp, sf, ch])
-                    self.index_to_action.append(tensor)
-                    self.action_to_index[tensor] = curr_idx
-                    curr_idx += 1
+        self.learning_agent = None
+        self.rewards = {}
 
-        # Define the optimiser which is used when updating the Q-network. The learning rate determines how big each gradient step is during backpropagation.
-        self.optimiser = torch.optim.Adam(self.q_network.parameters(), lr=0.001)
-        self.action_size = 90
-        self.gamma = 0.1
-        self.epsilon = 0.5
+    def plot_rewards(self):
+        plt.figure()
+        plt.plot(list(self.rewards.keys()), list(self.rewards.values()), label='Rewards')
+        plt.legend(bbox_to_anchor=(1, 0.5))
+        plt.show()
 
     def plot(self, prop_measurements):
         plt.figure()
@@ -159,7 +150,6 @@ class Node:
         plt.legend(bbox_to_anchor=(1, 0.5))
         plt.show()
 
-
         # ax = plt.subplot(3, 1, 3)
         # for lora_param_id in self.change_lora_param:
         #     ax.scatter(self.change_lora_param[lora_param_id], np.ones(len(self.change_lora_param[lora_param_id])))
@@ -189,7 +179,7 @@ class Node:
             # added also a random wait to accommodate for any timing issues on the node itself
 
             current_state = self.current_s()
-            action = self.choose_next_action()
+            action = self.learning_agent.choose_next_action(current_state)
             self.take_action(action)
 
             random_wait = np.random.randint(0, Config.MAX_DELAY_BEFORE_SLEEP_MS)
@@ -221,8 +211,9 @@ class Node:
                 print('{}: DONE sending'.format(self.id))
 
             next_state = self.current_s()
-            transition = (current_state, action, next_state)
-            self.train_q_network(transition)
+            reward = self.compute_reward()
+            transition = (current_state, action, reward, next_state)
+            self.learning_agent.train_q_network(transition)
 
             self.num_unique_packets_sent += 1  # at the end to be sure that this packet was tx
 
@@ -306,6 +297,7 @@ class Node:
             if Config.PRINT_ENABLED:
                 print('{}: \t REC at BS'.format(self.id))
             downlink_message = self.base_station.packet_received(self, packet, self.env.now)
+            self.num_packets_received += 1
         else:
             self.num_collided += 1
             downlink_message = None
@@ -605,6 +597,9 @@ class Node:
         }
         return pd.Series(series)
 
+    def assign_learning_agent(self, agent: LearningAgent):
+        self.learning_agent = agent
+
     @staticmethod
     def get_simulation_data_frame(nodes: list) -> pd.DataFrame:
         column_names = ['WaitTimeDC', 'NoDLReceived', 'UniquePackets', 'TotalPackets', 'CollidedPackets',
@@ -631,8 +626,14 @@ class Node:
         en_list = np.array(en_list)
         return np.mean(en_list), np.std(en_list)
 
-    # Reinforcement Learning Agent section
+    # Reinforcement Learning functionality
 
+    def take_action(self, a):
+        self.lora_param.change_tp_to((a[0].item()))
+        self.lora_param.change_sf_to((a[1].item()))
+        self.lora_param.change_channel_to((a[2].item()))
+
+    # Current State (RL)
     def current_s(self):
         tp = self.lora_param.tp
         sf = self.lora_param.sf
@@ -649,76 +650,20 @@ class Node:
             rss = 0
 
         energy = self.energy_value
-        # return (tp, channel, sinr, rss, energy)
-        return torch.Tensor([tp, sf, channel, energy, sinr, rss])
-
-    def choose_next_action(self):
-        curr_s = self.current_s()
-        output = self.q_network(curr_s)
-        max_action = torch.max(output)
-        pi = []
-        for a in output:
-            if (a == max_action):
-                pi.append(1 - self.epsilon + (self.epsilon / self.action_size))
-            else:
-                pi.append(self.epsilon / self.action_size)
-
-        selected_value = np.random.choice(output.detach().numpy(), p=pi)
-        ret = self.index_to_action[output.detach().numpy().tolist().index(selected_value)]
-        return ret
-
-    def take_action(self, a):
-        self.lora_param.change_tp_to((a[0].item()))
-        self.lora_param.change_sf_to((a[1].item()))
-        self.lora_param.change_channel_to((a[2].item()))
-
-    # Function that is called whenever we want to train the Q-network. Each call to this function takes in a transition tuple containing the data we use to update the Q-network.
-    def train_q_network(self, transition):
-        # Set all the gradients stored in the optimiser to zero.
-        self.optimiser.zero_grad()
-        # Calculate the loss for this transition.
-        loss = self._calculate_loss(transition)
-        # Compute the gradients based on this loss, i.e. the gradients of the loss with respect to the Q-network parameters.
-        loss.backward()
-        # Take one gradient step to update the Q-network.
-        self.optimiser.step()
-        # Return the loss as a scalar
-        return loss.item()
-
-    # Function to calculate the loss for a particular transition.
-    # transition = (s, a, s', a')
-    def _calculate_loss(self, transition):
-        s, a, next_s = transition
-        reward = self.compute_reward()
-        target = reward + self.gamma * torch.max(self.q_network(next_s))
-        # is_it = a in self.index_to_action
-        # print(is_it)
-        predicted = self.q_network(s)
-        predicted = predicted[self.action_to_index[a]]
-        loss = torch.nn.MSELoss()
-        return loss(target, predicted)
+        packet_id = self.unique_packet_id
+        num_pkt = self.num_packets_received
+        return torch.Tensor([sf, tp, channel, sinr, rss, packet_id, energy, num_pkt])
 
     def compute_reward(self):
+        # Commented out trade-off between 'network reliability and energy efficiency' version of the reward function
         # latest_sinr = self.air_interface.prop_measurements[self.id]['sinr'][-1]
         # threshold = float(self.sinr_table[self.lora_param.sf])
         # delta = 1 if latest_sinr >= threshold else 0
         # phi = self.tradeoff
         # reward = delta * phi + delta * (1 - phi) * latest_throughput / self.energy_value
+
         latest_throughput = self.air_interface.prop_measurements[self.id]['throughput'][-1]
         reward = - latest_throughput / self.energy_value
+        self.rewards[self.env.now] = reward
         return reward
 
-class Network(torch.nn.Module):
-
-    def __init__(self, input_dimensions, output_dimensions):
-        super(Network, self).__init__()
-        self.network = torch.nn.Sequential(
-            torch.nn.Linear(in_features=input_dimensions, out_features=100),
-            torch.nn.ReLU(),
-            torch.nn.Linear(in_features=100, out_features=100),
-            torch.nn.ReLU(),
-            torch.nn.Linear(in_features=100, out_features=output_dimensions)
-        )
-
-    def forward(self, input):
-        return self.network(input)

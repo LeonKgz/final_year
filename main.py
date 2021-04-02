@@ -14,6 +14,8 @@ from Location import Location
 from Node import Node
 from SINRModel import SINRModel
 from SNRModel import SNRModel
+from agent import LearningAgent
+from clustering_nodes import cluster_nodes
 
 
 def plot_time(_env):
@@ -25,7 +27,7 @@ energy_per_bit = 0
 tx_power_mW = {2: 91.8, 5: 95.9, 8: 101.6, 11: 120.8, 14: 146.5}  # measured TX power for each possible TP
 middle = np.round(Config.CELL_SIZE / 2)
 gateway_location = Location(x=middle, y=middle, indoor=False)
-plt.scatter(middle, middle, color='red')
+# plt.scatter(middle, middle, color='red')
 env = simpy.Environment()
 gateway = Gateway(env, gateway_location)
 nodes = []
@@ -63,18 +65,57 @@ for node_id in range(1000):
                 process_time=5,
                 location=location,
                 adr=False,
-                training=True,
-                testing=False,
+                # training=True,
+                # testing=False,
                 base_station=gateway, env=env, payload_size=payload_size, air_interface=air_interface)
 
     nodes.append(node)
-    env.process(node.run())
     plt.scatter(location.x, location.y, color='blue')
+
 
 axes = plt.gca()
 axes.set_xlim([0, Config.CELL_SIZE])
 axes.set_ylim([0, Config.CELL_SIZE])
+# plt.show()
+
+# Creation of clusters and assignment of one learning agent per cluster
+print("Creating clusters of nodes...")
+clusters = cluster_nodes(nodes, sector_size=200)
+print("Finished creating clusters")
+
+switch = True
+for cluster in clusters.keys():
+    if switch:
+        color = 'red'
+    else:
+        color = 'blue'
+    switch = not switch
+    for node in clusters[cluster]:
+        plt.scatter(node.location.x, node.location.y, color=color)
+
 plt.show()
+
+# for cluster in clusters.keys():
+#     for node in clusters[cluster]:
+#         plt.scatter(node.location.x, node.location.y, color='blue')
+#
+# for node in clusters[list(clusters.keys())[13]]:
+#     plt.scatter(node.location.x, node.location.y, color='red')
+#
+# plt.show()
+
+for (cluster_center_location, cluster) in clusters.items():
+    agent = LearningAgent()
+
+    # making sure each agent is assigned to at least one node
+    # TODO get rid of empty clusters earlier (problem of uneven distribution of nodes!)
+    if len(cluster) > 0:
+        agent.assign_nodes(cluster)
+
+# The simulation is kicked off after agents are assigned to respective clusters
+for node in nodes:
+    env.process(node.run())
+
 env.process(plot_time(env))
 
 d = datetime.timedelta(milliseconds=Config.SIMULATION_TIME)
@@ -85,7 +126,7 @@ for node in nodes:
     # node.log()
     measurements = air_interface.get_prop_measurements(node.id)
     node.plot(measurements)
-    print(node.compute_reward())
+    # node.plot_rewards()
     break
     energy_per_bit += node.energy_per_bit()
     print('E/bit {}'.format(energy_per_bit))

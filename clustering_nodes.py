@@ -17,14 +17,18 @@ def cluster_nodes(nodes, sector_size):
             cluster_centres.append((xs[i], ys[j]))
 
     clusters = {}
-    for key in cluster_centres:
-        clusters[key] = []
+    # for key in cluster_centres:
+    #     clusters[key] = []
 
     for n in nodes:
         # Effectively find the right column and row based on node's X and Y coordinates
         x = search_closest(xs, n.location.x)
         y = search_closest(ys, n.location.y)
-        clusters[(x, y)].append(n)
+
+        if ((x, y) not in clusters):
+            clusters[(x, y)] = [n]
+        else:
+            clusters[(x, y)].append(n)
 
     return clusters
 

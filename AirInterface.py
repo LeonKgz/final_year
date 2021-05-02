@@ -7,6 +7,7 @@ from Gateway import Gateway
 from LoRaPacket import UplinkMessage
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
 
 from SNRModel import SNRModel
 from SINRModel import SINRModel
@@ -193,14 +194,30 @@ class AirInterface:
         snr = self.snr_model.rss_to_snr(rss)
         packet.snr = snr
         # TODO remove users from other channels
-        sinr = self.sinr_model.rss_to_sinr(rss, sum(filter(lambda x: x < rss, map(lambda x: x.rss, filter(lambda x: x.lora_param.freq == packet.lora_param.freq, self.packages_in_air)))))
-        packet.sinr = sinr
 
+        total_power_acc = 0
+
+        if (packet in self.packages_in_air):
+            raise Exception('packet in question is in packages in air (AirInterface, line 200)')
+
+        for p in self.packages_in_air:
+            if (p.rss < packet.rss and p.lora_param.freq == packet.lora_param.freq):
+               total_power_acc += 10 ** (p.rss / 10)
+
+        np.seterr(divide='ignore')
+        # np.seterr(divide='warn')
+        total_power_db = 10 * np.log10(total_power_acc)
+
+        # sinr = self.sinr_model.rss_to_sinr(rss, sum(filter(lambda x: x < rss, map(lambda x: x.rss, filter(lambda x: x.lora_param.freq == packet.lora_param.freq, self.packages_in_air)))))
+        # sinr = self.sinr_model.rss_to_sinr(rss, sum(filter(lambda x: x < rss, map(lambda x: x.rss, self.packages_in_air))))
+        sinr = self.sinr_model.rss_to_sinr(rss, total_power_db)
+        packet.sinr = sinr
+        throughput = self.sinr_model.sinr_to_throughput(sinr)
         self.prop_measurements[node_id]['time'].append(self.env.now)
         self.prop_measurements[node_id]['rss'].append(rss)
         self.prop_measurements[node_id]['snr'].append(snr)
         self.prop_measurements[node_id]['sinr'].append(sinr)
-        self.prop_measurements[node_id]['throughput'].append(self.sinr_model.sinr_to_throughput(sinr))
+        self.prop_measurements[node_id]['throughput'].append(throughput)
         self.prop_measurements[node_id]['pkgs_in_air'].append(len(self.packages_in_air))
         self.prop_measurements[node_id]['time_for_pkgs'].append(self.env.now)
 

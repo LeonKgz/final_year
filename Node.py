@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from agent import LearningAgent
+from agent import DeepLearningAgent
 from EnergyProfile import EnergyProfile
 from Gateway import Gateway
 from Global import Config
@@ -12,6 +12,7 @@ from LoRaPacket import UplinkMessage
 from LoRaPacket import DownlinkMessage
 from LoRaPacket import DownlinkMetaMessage
 from LoRaParameters import LoRaParameters
+from RL_plots import RL_plots
 
 from copy import deepcopy
 
@@ -33,7 +34,8 @@ class NodeState(Enum):
 
 class Node:
     def __init__(self, node_id, energy_profile: EnergyProfile, lora_parameters, sleep_time, process_time, adr, location,
-                 base_station: Gateway, env, payload_size, air_interface, confirmed_messages=True, tradeoff = 0.5):
+                 base_station: Gateway, env, payload_size, air_interface, training, confirmed_messages, reward,
+                 tradeoff = 0.5):
 
         self.num_tx_state_changes = 0
         self.total_wait_time_because_dc = 0
@@ -95,13 +97,19 @@ class Node:
         self.sinr_table = {7: "-7.5", 8: "-10", 9: "-12.5", 10: "-15", 11: "-18", 12: "-21"}
 
         self.learning_agent = None
-        self.rewards = {}
+        # self.rewards = {}
+        self.training = training
+        self.reward_type = reward
 
-    def plot_rewards(self):
-        plt.figure()
-        plt.plot(list(self.rewards.keys()), list(self.rewards.values()), label='Rewards')
-        plt.legend(bbox_to_anchor=(1, 0.5))
-        plt.show()
+        self.rl_measurements = {
+            "rewards": {},
+            "throughputs": {},
+            # "energy_value": {},
+            # "energy_total": {},
+            "energy_per_bit": {}
+        }
+
+        self.actions = []
 
     def plot(self, prop_measurements):
         plt.figure()
@@ -177,10 +185,10 @@ class Node:
 
         while True:
             # added also a random wait to accommodate for any timing issues on the node itself
-
-            current_state = self.current_s()
-            action = self.learning_agent.choose_next_action(current_state)
-            self.take_action(action)
+            if (self.training):
+                current_state = self.current_s()
+                action = self.learning_agent.choose_next_action(current_state)
+                self.take_action(action)
 
             random_wait = np.random.randint(0, Config.MAX_DELAY_BEFORE_SLEEP_MS)
             yield self.env.timeout(random_wait)
@@ -210,10 +218,11 @@ class Node:
             if Config.PRINT_ENABLED:
                 print('{}: DONE sending'.format(self.id))
 
-            next_state = self.current_s()
             reward = self.compute_reward()
-            transition = (current_state, action, reward, next_state)
-            self.learning_agent.train_q_network(transition)
+            if (self.training):
+                next_state = self.current_s()
+                transition = (current_state, action, reward, next_state)
+                self.learning_agent.train_q_network(transition)
 
             self.num_unique_packets_sent += 1  # at the end to be sure that this packet was tx
 
@@ -269,10 +278,13 @@ class Node:
         self.packet_to_sent = packet
         airtime = packet.my_time_on_air()
 
-        # check channel with lowest wait time
-        channel = min(self.time_off, key=self.time_off.get)
-        # update to best_channel
-        packet.lora_param.freq = channel
+        channel = packet.lora_param.freq
+
+        if (not self.training):
+            # check channel with lowest wait time
+            channel = min(self.time_off, key=self.time_off.get)
+            # update to best_channel
+            packet.lora_param.freq = channel
 
         if self.time_off[channel] > self.env.now:
             # wait for certaint time to respect duty cycle
@@ -552,6 +564,9 @@ class Node:
             self.current_state = new_state
 
     def energy_per_bit(self) -> float:
+        if (self.packets_sent == 0):
+            # TODO: see what total energy is, should be zero as well?
+            return 0
         return self.total_energy_consumed() / (self.packets_sent * self.payload_size * 8)
 
     def transmit_related_energy_per_bit(self) -> float:
@@ -593,17 +608,18 @@ class Node:
             'TotalBytes': self.bytes_sent,
             'TotalEnergy': self.total_energy_consumed(),
             'TxRxEnergy': self.transmit_related_energy_consumed(),
-            'EnergyValuePackets': self.energy_value
+            'EnergyValuePackets': self.energy_value,
+            'RewardScore': self.compute_reward()
         }
         return pd.Series(series)
 
-    def assign_learning_agent(self, agent: LearningAgent):
+    def assign_learning_agent(self, agent: DeepLearningAgent):
         self.learning_agent = agent
 
     @staticmethod
     def get_simulation_data_frame(nodes: list) -> pd.DataFrame:
         column_names = ['WaitTimeDC', 'NoDLReceived', 'UniquePackets', 'TotalPackets', 'CollidedPackets',
-                        'RetransmittedPackets', 'TotalBytes', 'TotalEnergy', 'TxRxEnergy', 'EnergyValuePackets']
+                        'RetransmittedPackets', 'TotalBytes', 'TotalEnergy', 'TxRxEnergy', 'EnergyValuePackets', 'RewardScore']
         pdf = pd.DataFrame(columns=column_names)
         list_of_series = []
         for node in nodes:
@@ -629,30 +645,47 @@ class Node:
     # Reinforcement Learning functionality
 
     def take_action(self, a):
-        self.lora_param.change_tp_to((a[0].item()))
-        self.lora_param.change_sf_to((a[1].item()))
-        self.lora_param.change_channel_to((a[2].item()))
+        tp = (a[0].item())
+        sf = (a[1].item())
+        ch = (a[2].item())
+
+        self.lora_param.change_tp_to(tp)
+        self.lora_param.change_sf_to(sf)
+        self.lora_param.change_channel_to(ch)
+
+        self.actions.append((tp, sf, ch))
 
     # Current State (RL)
     def current_s(self):
-        tp = self.lora_param.tp
-        sf = self.lora_param.sf
-        channel = self.lora_param.freq
 
-        try:
-            sinr = self.air_interface.prop_measurements[self.id]['sinr'][-1]
-        except KeyError:
-            sinr = 0
+        if (self.learning_agent.type == "Q Learning"):
+            tp = self.lora_param.tp
+            sf = self.lora_param.sf
+            channel = self.lora_param.freq
+            return (tp, sf, channel)
+            # return torch.Tensor([tp, sf, channel])
 
-        try:
-            rss = self.air_interface.prop_measurements[self.id]['rss'][-1]
-        except KeyError:
-            rss = 0
+        if (self.learning_agent.type == "Deep Q Learning"):
+            tp = self.lora_param.tp
+            sf = self.lora_param.sf
+            channel = self.lora_param.freq
 
-        energy = self.energy_value
-        packet_id = self.unique_packet_id
-        num_pkt = self.num_packets_received
-        return torch.Tensor([sf, tp, channel, sinr, rss, packet_id, energy, num_pkt])
+            try:
+                sinr = self.air_interface.prop_measurements[self.id]['sinr'][-1]
+            except KeyError:
+                sinr = 0
+
+            try:
+                rss = self.air_interface.prop_measurements[self.id]['rss'][-1]
+            except KeyError:
+                rss = 0
+
+            # energy = self.energy_value
+            energy = self.energy_per_bit()
+            packet_id = self.unique_packet_id
+            num_pkt = self.num_packets_received
+            return torch.Tensor([sf, tp, channel, sinr, energy])
+            # return torch.Tensor([sf, tp, channel, sinr, rss, packet_id, energy, num_pkt])
 
     def compute_reward(self):
         # Commented out trade-off between 'network reliability and energy efficiency' version of the reward function
@@ -662,8 +695,37 @@ class Node:
         # phi = self.tradeoff
         # reward = delta * phi + delta * (1 - phi) * latest_throughput / self.energy_value
 
+        # reward = self.num_packets_received / self.total_energy_consumed()
+
         latest_throughput = self.air_interface.prop_measurements[self.id]['throughput'][-1]
-        reward = - latest_throughput / self.energy_value
-        self.rewards[self.env.now] = reward
+
+        # reward = (latest_throughput ** 3) / (self.energy_per_bit() ** (1/2))
+
+        # reward = latest_throughput / self.energy_per_bit()
+        # reward = latest_throughput
+
+
+        # reward = 1 / self.energy_per_bit()
+        # reward = latest_throughput / self.energy_value
+        # reward = latest_throughput / self.total_energy_consumed()
+        # reward = latest_throughput
+
+        if (self.reward_type == "energy"):
+            reward = 1 / self.energy_per_bit()
+        elif (self.reward_type == "normal"):
+            reward = latest_throughput / self.energy_per_bit()
+        elif (self.reward_type == "throughput"):
+            reward = latest_throughput
+
+        # self.rewards[self.env.now] = reward
+
+        self.rl_measurements["rewards"][self.env.now] = reward
+        self.rl_measurements["throughputs"][self.env.now] = latest_throughput
+        # self.rl_measurements["energy_value"][self.env.now] = self.energy_value
+        # self.rl_measurements["energy_total"][self.env.now] = self.total_energy_consumed()
+        self.rl_measurements["energy_per_bit"][self.env.now] = self.energy_per_bit()
+
         return reward
 
+    def get_mean_throughput(self):
+        return np.mean(self.air_interface.prop_measurements[self.id]['throughput'])

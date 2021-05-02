@@ -96,6 +96,10 @@ class LoRaParameters:
             self.h = header_implicit_mode
 
     def change_dr_to(self, dr: int):
+        ### PROJECT CODE START ###
+        raise Exception("dr should only be changed by the take_action() method")
+        ### PROJECT CODE END ###
+
         tmp = dr
 
         if tmp > 5 or tmp < 0:

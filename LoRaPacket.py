@@ -28,7 +28,10 @@ class UplinkMessage:
         self.node = node
         self.start_on_air = start_on_air
         self.lora_param = node.lora_param
-        self.lora_param.freq = np.random.choice(LoRaParameters.DEFAULT_CHANNELS)
+
+        # commented out, since during learning frequency is changed aand assigned as part of the action taken
+        # self.lora_param.freq = np.random.choice(LoRaParameters.DEFAULT_CHANNELS)
+
         self.payload_size = payload_size
         self.collided = collided
         self.received = False

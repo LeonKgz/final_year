@@ -12,6 +12,9 @@ class SINRModel:
         self.noise_floor = -174 + 10 * np.log10(125e3)
 
     def rss_to_sinr(self, rss: float, total_power):
+        # here rss, total_power and noise_floor are all measured in dB
+        # converting x to dB => x = 10 * log10(x)
+        # converting x from dB => x = 10 ** (x / 10)
         sinr_db = rss - 10 * np.log10(10 ** (total_power / 10) + 10 ** (self.noise_floor / 10))
         sinr = 10 ** (sinr_db / 10)
         return sinr

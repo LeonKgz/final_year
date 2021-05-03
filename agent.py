@@ -45,14 +45,9 @@ class LearningAgent:
 
     def convert_state_to_index(self, s):
         tp_S, sf_S, channel_S = s
-        # sf_A, tp_A, channel_A = a
         return (LoRaParameters.TRANSMISSION_POWERS.index(tp_S),
                 LoRaParameters.SPREADING_FACTORS.index(sf_S),
                 LoRaParameters.DEFAULT_CHANNELS.index(channel_S))
-                # LoRaParameters.TRANSMISSION_POWERS.index(tp_A),
-                # LoRaParameters.SPREADING_FACTORS.index(sf_A),
-                # LoRaParameters.DEFAULT_CHANNELS.index(channel_A),
-                # )
 
     def assign_nodes(self, nodes):
 
@@ -62,16 +57,6 @@ class LearningAgent:
         self.nodes = nodes
         for node in nodes:
             node.assign_learning_agent(agent=self)
-
-    def iterate_actions(self, actions):
-        curr_idx = 0
-        for tp in LoRaParameters.TRANSMISSION_POWERS:
-            for sf in LoRaParameters.SPREADING_FACTORS:
-                for ch in LoRaParameters.DEFAULT_CHANNELS:
-                    tensor = torch.tensor([tp, sf, ch])
-                    self.index_to_action.append(tensor)
-                    self.action_to_index[tensor] = curr_idx
-                    curr_idx += 1
 
     def choose_next_action(self, curr_s):
         # curr_s = self.current_s()
@@ -141,15 +126,14 @@ class LearningAgent:
 # Deep Reinforcement Learning Agent section
 class DeepLearningAgent:
 
-    def __init__(self, env, depth, lr=0.001, gamma=0.1, epsilon=0.5, sarsa=False):
+    def __init__(self, env, depth, state_space_dimensions, lr=0.001, gamma=0.1, epsilon=0.5, sarsa=False):
 
         self.type = "Deep Q Learning"
         self.nodes = []
         self.sarsa = sarsa
         # Create a Q-network, which predicts the q-value for a particular state.
         self.env = env
-
-        self.q_network = Network(input_dimensions=5, output_dimensions=90, depth=depth)
+        self.q_network = Network(input_dimensions=state_space_dimensions, output_dimensions=90, depth=depth)
 
         self.index_to_action = []
         self.action_to_index = {}
@@ -172,6 +156,7 @@ class DeepLearningAgent:
 
         self.buffer = ReplayBuffer(50)
         self.batch_size = 10
+        self.lr = lr
 
     def assign_nodes(self, nodes):
 
@@ -211,11 +196,14 @@ class DeepLearningAgent:
         ret = self.index_to_action[output.detach().numpy().tolist().index(selected_value)]
         return ret
 
-    # def take_action(self, a):
-    #     map(lambda node: node.take_action(a), self.nodes)
-
     # Function that is called whenever we want to train the Q-network. Each call to this function takes in a transition tuple containing the data we use to update the Q-network.
     def train_q_network(self, transition):
+
+        # Set all the gradients stored in the optimiser to zero.
+        self.optimiser.zero_grad()
+
+        # Calculate the loss for this transition.
+        loss = self._calculate_loss(transition)
 
         # self.buffer.push(transition)
         #
@@ -223,16 +211,14 @@ class DeepLearningAgent:
         #     return
         #
         # transitions = self.buffer.sample(self.batch_size)
-
-        # Set all the gradients stored in the optimiser to zero.
-        self.optimiser.zero_grad()
-        # Calculate the loss for this transition.
-        loss = self._calculate_loss(transition)
         # loss = self._calculate_batch_loss(transitions)
+
         # Compute the gradients based on this loss, i.e. the gradients of the loss with respect to the Q-network parameters.
         loss.backward()
+
         # Take one gradient step to update the Q-network.
         self.optimiser.step()
+
         # Return the loss as a scalar
         return loss.item()
 

@@ -34,7 +34,7 @@ class NodeState(Enum):
 
 class Node:
     def __init__(self, node_id, energy_profile: EnergyProfile, lora_parameters, sleep_time, process_time, adr, location,
-                 base_station: Gateway, env, payload_size, air_interface, training, confirmed_messages, reward,
+                 base_station: Gateway, env, payload_size, air_interface, training, confirmed_messages, reward, state_space,
                  tradeoff = 0.5):
 
         self.num_tx_state_changes = 0
@@ -110,6 +110,7 @@ class Node:
         }
 
         self.actions = []
+        self.state_space = state_space
 
     def plot(self, prop_measurements):
         plt.figure()
@@ -175,13 +176,14 @@ class Node:
         random_wait = np.random.uniform(0, Config.MAX_DELAY_START_PER_NODE_MS)
         yield self.env.timeout(random_wait)
         self.start_device_active = self.env.now
-        if Config.PRINT_ENABLED:
-            print('{} ms delayed prior to joining'.format(random_wait))
-            print('{} joining the network'.format(self.id))
-            # TODO ERROR!!!!! self.process
-            self.join(self.env)
-        if Config.PRINT_ENABLED:
-            print('{}: joined the network'.format(self.id))
+
+        # if Config.PRINT_ENABLED:
+        #     print('{} ms delayed prior to joining'.format(random_wait))
+        #     print('{} joining the network'.format(self.id))
+        #     # TODO ERROR!!!!! self.process
+        #     self.join(self.env)
+        # if Config.PRINT_ENABLED:
+        #     print('{}: joined the network'.format(self.id))
 
         while True:
             # added also a random wait to accommodate for any timing issues on the node itself
@@ -200,8 +202,8 @@ class Node:
             self.track_power(self.energy_profile.sleep_power_mW)
 
             # ------------SENDING------------ #
-            if Config.PRINT_ENABLED:
-                print(f'{self.id}: SENDING packet at TIME — {self.env.now}')
+            # if Config.PRINT_ENABLED:
+            #     print(f'{self.id}: SENDING packet at TIME — {self.env.now}')
 
             self.unique_packet_id += 1
 
@@ -209,14 +211,15 @@ class Node:
                                    confirmed_message=self.confirmed_messages, id=self.unique_packet_id)
 
             downlink_message = yield self.env.process(self.send(packet))
+
             if downlink_message is None:
                 # message is collided and not received at the BS
                 yield self.env.process(self.dl_message_lost())
             else:
                 yield self.env.process(self.process_downlink_message(downlink_message, packet))
 
-            if Config.PRINT_ENABLED:
-                print('{}: DONE sending'.format(self.id))
+            # if Config.PRINT_ENABLED:
+            #     print('{}: DONE sending'.format(self.id))
 
             reward = self.compute_reward()
             if (self.training):
@@ -451,7 +454,18 @@ class Node:
                 power = self.energy_profile.rx_power['rx_lna_on_mW']
             else:
                 temp_lora_param = deepcopy(packet.lora_param)
+
+                ### PROJECT CODE START
+                curr_val = self.lora_param.dr
+                ### PROJECT CODE END
+
                 temp_lora_param.change_dr_to(3)
+
+                ### PROJECT CODE START
+                if (self.lora_param.dr != curr_val):
+                    raise Exception("DR is changed around the learning process (not through take_action() call)")
+                ### PROJECT CODE END
+
                 rx_time = LoRaPacket.time_on_air(12, temp_lora_param)
                 rx_energy = (rx_time / 1000) * self.energy_profile.rx_power['rx_lna_off_mW']
                 power = self.energy_profile.rx_power['rx_lna_off_mW']
@@ -663,28 +677,44 @@ class Node:
             sf = self.lora_param.sf
             channel = self.lora_param.freq
             return (tp, sf, channel)
-            # return torch.Tensor([tp, sf, channel])
 
         if (self.learning_agent.type == "Deep Q Learning"):
             tp = self.lora_param.tp
             sf = self.lora_param.sf
             channel = self.lora_param.freq
 
-            try:
-                sinr = self.air_interface.prop_measurements[self.id]['sinr'][-1]
-            except KeyError:
-                sinr = 0
+            # This is the absolute minimum state space that makes sense (equivalent to action space)
+            minimal_state = [tp, sf, channel]
 
-            try:
-                rss = self.air_interface.prop_measurements[self.id]['rss'][-1]
-            except KeyError:
-                rss = 0
+            if ("sinr" in self.state_space):
+                try:
+                    sinr = self.air_interface.prop_measurements[self.id]['sinr'][-1]
+                except KeyError:
+                    sinr = 0
+                minimal_state.append(sinr)
 
-            # energy = self.energy_value
-            energy = self.energy_per_bit()
-            packet_id = self.unique_packet_id
-            num_pkt = self.num_packets_received
-            return torch.Tensor([sf, tp, channel, sinr, energy])
+            if ("rss" in self.state_space):
+                try:
+                    rss = self.air_interface.prop_measurements[self.id]['rss'][-1]
+                except KeyError:
+                    rss = 0
+                minimal_state.append(rss)
+
+            if ("energy" in self.state_space):
+                energy = self.energy_per_bit()
+                minimal_state.append(energy)
+
+            if ("packet_id" in self.state_space):
+                packet_id = self.unique_packet_id
+                minimal_state.append(packet_id)
+
+            if ("num_pkt" in self.state_space):
+                num_pkt = self.num_packets_received
+                minimal_state.append(num_pkt)
+
+            # return torch.Tensor([sf, tp, channel, sinr, energy])
+            return torch.Tensor(minimal_state)
+
             # return torch.Tensor([sf, tp, channel, sinr, rss, packet_id, energy, num_pkt])
 
     def compute_reward(self):
@@ -695,20 +725,7 @@ class Node:
         # phi = self.tradeoff
         # reward = delta * phi + delta * (1 - phi) * latest_throughput / self.energy_value
 
-        # reward = self.num_packets_received / self.total_energy_consumed()
-
         latest_throughput = self.air_interface.prop_measurements[self.id]['throughput'][-1]
-
-        # reward = (latest_throughput ** 3) / (self.energy_per_bit() ** (1/2))
-
-        # reward = latest_throughput / self.energy_per_bit()
-        # reward = latest_throughput
-
-
-        # reward = 1 / self.energy_per_bit()
-        # reward = latest_throughput / self.energy_value
-        # reward = latest_throughput / self.total_energy_consumed()
-        # reward = latest_throughput
 
         if (self.reward_type == "energy"):
             reward = 1 / self.energy_per_bit()
@@ -716,8 +733,6 @@ class Node:
             reward = latest_throughput / self.energy_per_bit()
         elif (self.reward_type == "throughput"):
             reward = latest_throughput
-
-        # self.rewards[self.env.now] = reward
 
         self.rl_measurements["rewards"][self.env.now] = reward
         self.rl_measurements["throughputs"][self.env.now] = latest_throughput

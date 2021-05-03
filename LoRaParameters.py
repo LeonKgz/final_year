@@ -64,11 +64,22 @@ class LoRaParameters:
     # CR: % 5..8 This is the error correction coding. Higher values mean more overhead.
     # header_implicit_mode -> header is removed
     def __init__(self, freq, sf: int, bw, cr, crc_enabled, de_enabled, header_implicit_mode, tp=14):
+
+        # frequency
         self.freq = freq
+
+        # spreading factor
         self.sf = sf
+
+        # bandwidth
         self.bw = bw
+
         self.crc = crc_enabled
+
+        # coding rate i.e. => https://en.wikipedia.org/wiki/Code_rate
         self.cr = cr
+
+        # transmission power
         self.tp = tp
 
         if sf == 7:
@@ -96,9 +107,6 @@ class LoRaParameters:
             self.h = header_implicit_mode
 
     def change_dr_to(self, dr: int):
-        ### PROJECT CODE START ###
-        raise Exception("dr should only be changed by the take_action() method")
-        ### PROJECT CODE END ###
 
         tmp = dr
 

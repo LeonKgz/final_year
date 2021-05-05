@@ -34,7 +34,7 @@ class NodeState(Enum):
 
 class Node:
     def __init__(self, node_id, energy_profile: EnergyProfile, lora_parameters, sleep_time, process_time, adr, location,
-                 base_station: Gateway, env, payload_size, air_interface, training, confirmed_messages, reward, state_space,
+                 base_station: Gateway, env, payload_size, air_interface, training, confirmed_messages, reward_type, state_space,
                  tradeoff = 0.5):
 
         self.num_tx_state_changes = 0
@@ -99,7 +99,7 @@ class Node:
         self.learning_agent = None
         # self.rewards = {}
         self.training = training
-        self.reward_type = reward
+        self.reward_type = reward_type
 
         self.rl_measurements = {
             "rewards": {},
@@ -679,12 +679,24 @@ class Node:
             return (tp, sf, channel)
 
         if (self.learning_agent.type == "Deep Q Learning"):
-            tp = self.lora_param.tp
-            sf = self.lora_param.sf
-            channel = self.lora_param.freq
 
-            # This is the absolute minimum state space that makes sense (equivalent to action space)
-            minimal_state = [tp, sf, channel]
+            ### Commented out code assuming minimal viable state as [tp, sf, channel] ###
+
+            # # This is the absolute minimum state space that makes sense (equivalent to action space)
+            # minimal_state = [tp, sf, channel]
+            minimal_state = []
+
+            if ("tp" in self.state_space):
+                tp = self.lora_param.tp
+                minimal_state.append(tp)
+
+            if ("sf" in self.state_space):
+                sf = self.lora_param.sf
+                minimal_state.append(sf)
+
+            if ("channel" in self.state_space):
+                channel = self.lora_param.freq
+                minimal_state.append(channel)
 
             if ("sinr" in self.state_space):
                 try:

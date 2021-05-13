@@ -20,6 +20,7 @@ class AirInterface:
         self.num_of_packets_send = 0
         self.gateway = gateway
         self.packages_in_air = list()
+        self.packages_in_air_not_collided = list()
         self.color_per_node = dict()
         self.prop_model = prop_model
         self.snr_model = snr_model
@@ -168,6 +169,8 @@ class AirInterface:
                         time_collided_nodes = AirInterface.timing_collision(packet, other)
                         if time_collided_nodes is not None:
                             AirInterface.power_collision(packet, other, time_collided_nodes)
+        if (not packet.collided):
+            self.packages_in_air_not_collided.append(packet)
         return packet.collided
 
     color_values = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f']
@@ -198,7 +201,7 @@ class AirInterface:
         total_power_acc = 0
 
         if (packet in self.packages_in_air):
-            raise Exception('packet in question is in packages in air (AirInterface, line 200)')
+            raise Exception('packet in question is in packages in air (added below) (AirInterface, line 200)')
 
         for p in self.packages_in_air:
             if (p.rss < packet.rss and p.lora_param.freq == packet.lora_param.freq):
@@ -210,9 +213,11 @@ class AirInterface:
 
         # sinr = self.sinr_model.rss_to_sinr(rss, sum(filter(lambda x: x < rss, map(lambda x: x.rss, filter(lambda x: x.lora_param.freq == packet.lora_param.freq, self.packages_in_air)))))
         # sinr = self.sinr_model.rss_to_sinr(rss, sum(filter(lambda x: x < rss, map(lambda x: x.rss, self.packages_in_air))))
+
         sinr = self.sinr_model.rss_to_sinr(rss, total_power_db)
         packet.sinr = sinr
         throughput = self.sinr_model.sinr_to_throughput(sinr)
+
         self.prop_measurements[node_id]['time'].append(self.env.now)
         self.prop_measurements[node_id]['rss'].append(rss)
         self.prop_measurements[node_id]['snr'].append(snr)

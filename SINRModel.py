@@ -4,12 +4,13 @@ import numpy as np
 
 class SINRModel:
     def __init__(self):
-
+        ### REUSING INITIALIZATION PARAMETERS FROM SNRModel START ###
         self.noise = -80  # mean_mean_values
         self.std_noise = 6  # mean_std_values
 
         # noise floor according to https://www.semtech.com/uploads/documents/an1200.22.pdf
         self.noise_floor = -174 + 10 * np.log10(125e3)
+        ### REUSING INITIALIZATION PARAMETERS FROM SNRModel END ###
 
     def rss_to_sinr(self, rss: float, total_power):
         # here rss, total_power and noise_floor are all measured in dB

@@ -106,7 +106,8 @@ class Node:
             "throughputs": {},
             # "energy_value": {},
             # "energy_total": {},
-            "energy_per_bit": {}
+            "energy_per_bit": {},
+            "pkgs_in_air": {}
         }
 
         self.actions = []
@@ -307,7 +308,6 @@ class Node:
         # print('\t Our packet has collided (2)')
 
         #      Received at BS      #
-
         if not collided:
             if Config.PRINT_ENABLED:
                 print('{}: \t REC at BS'.format(self.id))
@@ -742,6 +742,7 @@ class Node:
         if (self.reward_type == "energy"):
             reward = 1 / self.energy_per_bit()
         elif (self.reward_type == "normal"):
+            # delta * latest_throughput + (1 - delta) * 1 / self.energy_per_bit()
             reward = latest_throughput / self.energy_per_bit()
         elif (self.reward_type == "throughput"):
             reward = latest_throughput
@@ -751,6 +752,7 @@ class Node:
         # self.rl_measurements["energy_value"][self.env.now] = self.energy_value
         # self.rl_measurements["energy_total"][self.env.now] = self.total_energy_consumed()
         self.rl_measurements["energy_per_bit"][self.env.now] = self.energy_per_bit()
+        self.rl_measurements["pkgs_in_air"][self.env.now] = len(self.air_interface.packages_in_air)
 
         return reward
 

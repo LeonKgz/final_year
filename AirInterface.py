@@ -20,7 +20,7 @@ class AirInterface:
         self.num_of_packets_send = 0
         self.gateway = gateway
         self.packages_in_air = list()
-        self.packages_in_air_not_collided = list()
+        self.packages_in_air_to_noma = list()
         self.color_per_node = dict()
         self.prop_model = prop_model
         self.snr_model = snr_model
@@ -169,8 +169,6 @@ class AirInterface:
                         time_collided_nodes = AirInterface.timing_collision(packet, other)
                         if time_collided_nodes is not None:
                             AirInterface.power_collision(packet, other, time_collided_nodes)
-        if (not packet.collided):
-            self.packages_in_air_not_collided.append(packet)
         return packet.collided
 
     color_values = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f']
@@ -241,7 +239,23 @@ class AirInterface:
         self.packages_in_air.remove(packet)
         self.prop_measurements[packet.node.id]['pkgs_in_air'].append(len(self.packages_in_air))
         self.prop_measurements[packet.node.id]['time_for_pkgs'].append(self.env.now)
+
+        if (not collided):
+            self.noma_insert(packet)
+
         return collided
+
+    def noma_insert(self, p_new):
+        if (len(self.packages_in_air_to_noma) == 0):
+            self.packages_in_air_to_noma.append(p_new)
+        elif (p_new.rss > self.packages_in_air_to_noma[-1].rss):
+            self.packages_in_air_to_noma.append(p_new)
+        else:
+            for p in self.packages_in_air_to_noma:
+                if (p_new.rss < p.rss):
+                    index = self.packages_in_air_to_noma.index(p)
+                    self.packages_in_air_to_noma.insert(index, p_new)
+                    break
 
     def plot_packets_in_air(self):
         plt.figure()

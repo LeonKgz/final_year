@@ -202,8 +202,11 @@ class AirInterface:
             raise Exception('packet in question is in packages in air (added below) (AirInterface, line 200)')
 
         for p in self.packages_in_air:
-            if (p.rss < packet.rss and p.lora_param.freq == packet.lora_param.freq):
-               total_power_acc += 10 ** (p.rss / 10)
+            # convert from dB values
+            p_rss = 10 ** (p.rss / 10)
+            packet_rss = 10 ** (packet.rss / 10)
+            if (p_rss < packet_rss and p.lora_param.freq == packet.lora_param.freq):
+               total_power_acc += p_rss
 
         np.seterr(divide='ignore')
         # np.seterr(divide='warn')
@@ -240,7 +243,7 @@ class AirInterface:
         self.prop_measurements[packet.node.id]['pkgs_in_air'].append(len(self.packages_in_air))
         self.prop_measurements[packet.node.id]['time_for_pkgs'].append(self.env.now)
 
-        if (not collided):
+        if (packet.noma and not collided):
             self.noma_insert(packet)
 
         return collided
@@ -256,6 +259,8 @@ class AirInterface:
                     index = self.packages_in_air_to_noma.index(p)
                     self.packages_in_air_to_noma.insert(index, p_new)
                     break
+
+
 
     def plot_packets_in_air(self):
         plt.figure()

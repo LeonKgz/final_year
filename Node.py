@@ -213,7 +213,7 @@ class Node:
             self.unique_packet_id += 1
 
             packet = UplinkMessage(node=self, start_on_air=self.env.now, payload_size=self.payload_size,
-                                   confirmed_message=self.confirmed_messages, id=self.unique_packet_id)
+                                   confirmed_message=self.confirmed_messages, id=self.unique_packet_id, noma=False)
 
             downlink_message = yield self.env.process(self.send(packet))
 
@@ -272,7 +272,7 @@ class Node:
             self.unique_packet_id += 1
 
             packet = UplinkMessage(node=self, start_on_air=self.env.now, payload_size=self.payload_size,
-                                   confirmed_message=self.confirmed_messages, id=self.unique_packet_id)
+                                   confirmed_message=self.confirmed_messages, id=self.unique_packet_id, noma=True)
 
             yield self.env.process(self.send_noma(packet))
 

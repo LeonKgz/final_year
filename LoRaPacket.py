@@ -21,14 +21,13 @@ def time_on_air(payload_size: int, lora_param: LoRaParameters):
     return t_pream + t_payload
 
 class UplinkMessage:
-    def __init__(self, node, start_on_air, payload_size,  id, collided=False,
-                 confirmed_message=True, unique_msg = True):
+    def __init__(self, node, start_on_air, payload_size, id, collided=False,
+                 confirmed_message=True, unique_msg = True, noma=False):
 
         self. is_confirmed_message=confirmed_message
         self.node = node
         self.start_on_air = start_on_air
         self.lora_param = node.lora_param
-
         # commented out, since during learning frequency is changed aand assigned as part of the action taken
         # self.lora_param.freq = np.random.choice(LoRaParameters.DEFAULT_CHANNELS)
 
@@ -44,6 +43,8 @@ class UplinkMessage:
         if self.is_confirmed_message:
             self.downlink_message = None
         self.id = id
+
+        self.noma = noma
 
     # this function computes the airtime of a packet
     # for a packet with `payloadSize` in bytes

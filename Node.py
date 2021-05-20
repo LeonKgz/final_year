@@ -5,7 +5,6 @@ import numpy as np
 import torch
 
 from NOMA import NOMA
-from agent import DeepLearningAgent
 from EnergyProfile import EnergyProfile
 from Gateway import Gateway
 from Global import Config
@@ -19,6 +18,9 @@ from copy import deepcopy
 
 from Location import Location
 import pandas as pd
+
+from agent import LearningAgent
+
 
 class NodeState(Enum):
     OFFLINE = auto()
@@ -732,7 +734,7 @@ class Node:
         }
         return pd.Series(series)
 
-    def assign_learning_agent(self, agent: DeepLearningAgent):
+    def assign_learning_agent(self, agent: LearningAgent):
         self.learning_agent = agent
 
     @staticmethod
@@ -804,13 +806,13 @@ class Node:
     # Current State (RL)
     def current_s(self):
 
-        if (self.learning_agent.type == "Q Learning"):
+        if (not self.learning_agent.config["deep"]):
             tp = self.lora_param.tp
             sf = self.lora_param.sf
             channel = self.lora_param.freq
             return (tp, sf, channel)
 
-        if (self.learning_agent.type == "Deep Q Learning"):
+        if (self.learning_agent.config["deep"]):
 
             ### Commented out code assuming minimal viable state as [tp, sf, channel] ###
 

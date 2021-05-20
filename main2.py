@@ -18,7 +18,7 @@ from Node import Node
 from RL_plots import RL_plots
 from SINRModel import SINRModel
 from SNRModel import SNRModel
-from agent import DeepLearningAgent, LearningAgent
+from agent import LearningAgent
 from clustering_nodes import cluster_nodes, search_closest
 
 
@@ -77,22 +77,39 @@ def init_nodes(config, agent_to_nodes=None):
     agents = []
 
     if (agent_to_nodes == None):
+
+        # axes = plt.gca()
+        # axes.set_xlim([0, Config.CELL_SIZE])
+        # axes.set_ylim([0, Config.CELL_SIZE])
+
         # Creation of clusters and assignment of one learning agent per cluster
         print("Creating clusters of nodes...")
         clusters = cluster_nodes(nodes, sector_size=config["sector_size"])
         print("Finished creating clusters")
 
+        # for cluster in clusters.keys():
+        #     for node in clusters[cluster]:
+        #         plt.scatter(node.location.x, node.location.y, color='blue')
+        #
+        # for node in clusters[list(clusters.keys())[13]]:
+        #     plt.scatter(node.location.x, node.location.y, color='red')
+        #
+        # major_ticks = np.arange(0, 1001, config["sector_size"])
+        #
+        # axes.set_xticks(major_ticks)
+        # axes.set_yticks(major_ticks)
+        #
+        # plt.grid(True)
+        # plt.show()
+
         for (cluster_center_location, cluster) in clusters.items():
 
-            if config["deep"]:
-                agent = DeepLearningAgent(env=env, depth=config["depth"], config=config, lr=0.001)
-            else:
-                agent = LearningAgent(env=env, config=config, alpha=0.5)
+            # if config["deep"]:
+            #     agent = DeepLearningAgent(env=env, depth=config["depth"], config=config, lr=0.001)
+            # else:
+            #     agent = LearningAgent(env=env, config=config, alpha=0.5)
 
-            # Old way of differentiating between function approx. and tabular implementations
-            # agent = DeepLearningAgent(env=env, depth=4, config=config, lr=0.001) \
-            #     if config["deep"] else \
-            #         LearningAgent(env=env, config=config, alpha=0.5)
+            agent = LearningAgent(env=env, config=config)
 
             # making sure each agent is assigned to at least one node
             # TODO (problem of uneven distribution of nodes!)
@@ -360,14 +377,16 @@ def generate_config(config):
         "sector_size": 100,
         "gamma": 0.5,
         "epsilon": 0.5,
-        # "slow_action": False,
+        "alpha": 0.5,
         "slow_sf": False,
         "slow_tp": False,
         "slow_channel": False,
-        "noma": False,
+        "noma": True,
         "device": torch.device("cuda" if torch.cuda.is_available() else "cpu"),
         "GLIE": False,
         "Robbins-Monroe": False,
+        "slow_epsilon": False,
+        "slow_alpha": False,
     }
 
     for (key, val) in config.items():
@@ -384,45 +403,88 @@ adr_conf_config = generate_config({
     "adr": True})
 # plot_air_packages(configurations=configurations)
 
+# config_global = [
+#     # "Replay buffer and double deep",
+#     [
+#         "Applying all optimizations with sector size 50",
+#         # no_adr_no_conf_config,
+#         {
+#             "title": "Deep Q learning",
+#             "training": True,
+#             "deep": True,
+#             "double_deep": True,
+#             "replay_buffer": True,
+#             "GLIE": True,
+#             "Robbins-Monroe": True,
+#             "state_space": ["tp", "sf", "channel", "sinr", "rss", "energy"],
+#         },
+#     ],
+# ]
 config_global = [
+    # "Replay buffer and double deep",
     [
-        "GLIE conditions",
+        "Applying all optimizations with sector size 50",
+        # no_adr_no_conf_config,
+        # {
+        #     "title": "Deep Q learning",
+        #     "training": True,
+        #     "deep": True,
+        #     "double_deep": True,
+        #     "replay_buffer": True,
+        #     "state_space": ["tp", "sf", "channel", "sinr", "rss"],
+        #     "days": 30,
+        # },
+        # {
+        #     "title": "Deep Q learning",
+        #     "training": True,
+        #     "deep": True,
+        #     "double_deep": True,
+        #     "replay_buffer": True,
+        #     "GLIE": True,
+        #     "Robbins-Monroe": True,
+        #     "state_space": ["tp", "sf", "channel", "sinr", "rss"],
+        #     "days": 30,
+        # },
+        # {
+        #     "title": "Deep Q learning",
+        #     "training": True,
+        #     "deep": True,
+        #     "double_deep": True,
+        #     "replay_buffer": True,
+        #     "GLIE": True,
+        #     "slow_epsilon": True,
+        #     "Robbins-Monroe": True,
+        #     "state_space": ["tp", "sf", "channel", "sinr", "rss"],
+        #     "days": 30,
+        # },
+        # {
+        #     "title": "Deep Q learning",
+        #     "training": True,
+        #     "deep": True,
+        #     "double_deep": True,
+        #     "replay_buffer": True,
+        #     "GLIE": True,
+        #     "slow_alpha": True,
+        #     "Robbins-Monroe": True,
+        #     "state_space": ["tp", "sf", "channel", "sinr", "rss"],
+        #     "days": 30,
+        # },
         {
-            "title": "deep Q learning",
-            "deep": True,
-            "training": True,
-        },
-        {
-            "title": "deep Q learning with GLIE",
+            "title": "Deep Q learning",
             "training": True,
             "deep": True,
-            "GLIE": True
+            "double_deep": True,
+            "replay_buffer": True,
+            "GLIE": True,
+            "slow_epsilon": True,
+            "slow_alpha": True,
+            "Robbins-Monroe": True,
+            "state_space": ["tp", "sf", "channel", "sinr", "rss"],
+            "days": 10,
         },
     ],
-
-    ## "Replay buffer and double deep",
-    # [
-    #     "Replay buffer and double deep",
-    #     {
-    #         "title": "Deep Q learning",
-    #         "training": True,
-    #         "deep": True
-    #     },
-    #     {
-    #         "title": "Deep Q learning + Replay",
-    #         "training": True,
-    #         "deep": True,
-    #         "replay_buffer": True
-    #     },
-    #     {
-    #         "title": "Double Deep Q learning + Replay",
-    #         "training": True,
-    #         "deep": True,
-    #         "replay_buffer": True,
-    #         "double_deep": True
-    #     },
-    # ],
 ]
+
 
 # Still to try buffer with new optimizations
 for i in range(len(config_global)):

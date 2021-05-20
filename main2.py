@@ -121,7 +121,7 @@ def init_nodes(config, agent_to_nodes=None):
         # only loading and saving of deep models has been implemented so far
         for id in list(agent_to_nodes.keys()):
 
-            agent = DeepLearningAgent(env=env, depth=config["depth"], config=config, lr=0.001)
+            agent = LearningAgent(env=env, config=config)
             agent.q_network.load_state_dict(torch.load(f"./model/agent_{id}.pth"))
             agent.q_network.eval()
             agents.append(agent)
@@ -368,6 +368,7 @@ energy_reward = "energy"
 def generate_config(config):
     standard_body = {
         "title": "",
+        "label": "",
         "conf": False,
         "adr": False,
         "training": False,

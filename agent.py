@@ -7,43 +7,61 @@ import random
 import torch
 import torch.nn.utils.weight_norm as weight_norm
 
-# Deep Reinforcement Learning Agent section
 class LearningAgent:
 
-    def __init__(self, env, alpha=0.001, gamma=0.1, epsilon=0.5, sarsa=False, mc=False):
+    def __init__(self, env, config, alpha=0.001):
 
         self.type = "Q Learning"
-        self.sarsa = sarsa
-        self.mc = mc
+        self.sarsa = config["sarsa"]
+        self.mc = config["mc"]
         self.nodes = []
+        self.config = config
 
-        # Create a Q-network, which predicts the q-value for a particular state.
         self.env = env
 
         tps = len(LoRaParameters.TRANSMISSION_POWERS)
         sfs = len(LoRaParameters.SPREADING_FACTORS)
         chs = len(LoRaParameters.DEFAULT_CHANNELS)
 
-
         self.index_to_action = []
         self.action_to_index = {}
 
         curr_idx = 0
-        for tp in LoRaParameters.TRANSMISSION_POWERS:
-            for sf in LoRaParameters.SPREADING_FACTORS:
-                for ch in LoRaParameters.DEFAULT_CHANNELS:
+        # self.slow = config["slow_action"]
+
+        if config["slow_tp"]:
+            self.tp_range = range(-1, 2)
+        else:
+            self.tp_range = LoRaParameters.TRANSMISSION_POWERS
+
+        if config["slow_sf"]:
+            self.sf_range = range(-1, 2)
+        else:
+            self.sf_range = LoRaParameters.SPREADING_FACTORS
+
+        if config["slow_channel"]:
+            self.channel_range = range(-1, 2)
+        else:
+            self.channel_range = LoRaParameters.DEFAULT_CHANNELS
+
+        for tp in self.tp_range:
+            for sf in self.sf_range:
+                for ch in self.channel_range:
                     tensor = torch.tensor([tp, sf, ch])
                     self.index_to_action.append(tensor)
                     self.action_to_index[tensor] = curr_idx
                     curr_idx += 1
+        self.action_size = curr_idx
 
-        self.action_size = 90
-        self.gamma = gamma
-        self.epsilon = epsilon
+        self.gamma = config["gamma"]
+        self.epsilon = config["epsilon"]
         self.alpha = alpha
         self.losses = {}
 
         self.q_table = torch.Tensor(tps, sfs, chs, self.action_size)
+
+        # start with epsilon = 1 / 2
+        self.epsilon_counter = 2
 
     def convert_state_to_index(self, s):
         tp_S, sf_S, channel_S = s
@@ -77,6 +95,11 @@ class LearningAgent:
             else:
                 pi.append(self.epsilon / self.action_size)
 
+        if (self.config["GLIE"]):
+            # Update epsilon to ensure convergence according to GLIE
+            self.epsilon_counter += 1
+            self.epsilon = 1 / self.epsilon_counter
+
         pi[-1] = 1 - sum(pi[:-1])
 
         if (pi[-1] < 0):
@@ -91,13 +114,12 @@ class LearningAgent:
             exit(-1)
 
         if math.isnan(selected_value):
-            print("NAN ENCOUNTERED")
+            # print("NAN ENCOUNTERED")
             return random.choice(self.index_to_action)
 
         ret = self.index_to_action[output.detach().numpy().tolist().index(selected_value)]
         return ret
 
-    # Function that is called whenever we want to train the Q-network. Each call to this function takes in a transition tuple containing the data we use to update the Q-network.
     # transition = (s, a, r, s')
     def train_q_network(self, transition):
         s, a, reward, next_s = transition
@@ -125,52 +147,76 @@ class LearningAgent:
         else:
             self.q_table[s_index][a_index] = q_s_a + self.alpha * (reward + self.gamma * max_q_s_a - q_s_a)
 
-
-
-# Deep Reinforcement Learning Agent section
 class DeepLearningAgent:
 
-    def __init__(self, env, depth, state_space_dimensions, lr=0.001, gamma=0.1, epsilon=0.5,
-                 sarsa=False, replay_buffer=False, double_deep=False):
+    def __init__(self, env, depth, config, lr=0.001):
 
         self.type = "Deep Q Learning"
         self.nodes = []
+        self.config = config
 
         # Boolean flags
-        self.sarsa = sarsa
-        self.double_deep = double_deep
-        self.replay_buffer = replay_buffer
-
-        # Initialize Q-network and Target network, which predicts the q-value for a particular state.
-        self.env = env
-        self.q_network = Network(input_dimensions=state_space_dimensions, output_dimensions=90, depth=depth)
-        self.target_network = Network(input_dimensions=state_space_dimensions, output_dimensions=90, depth=depth)
-        self.target_network.load_state_dict(self.q_network.state_dict())
+        self.sarsa = config["sarsa"]
+        self.double_deep = config["double_deep"]
+        self.replay_buffer = config["replay_buffer"]
 
         self.index_to_action = []
         self.action_to_index = {}
         curr_idx = 0
-        for tp in LoRaParameters.TRANSMISSION_POWERS:
-            for sf in LoRaParameters.SPREADING_FACTORS:
-                for ch in LoRaParameters.DEFAULT_CHANNELS:
+
+        # self.slow = config["slow_action"]
+
+        if config["slow_tp"]:
+            self.tp_range = range(-1, 2)
+        else:
+            self.tp_range = LoRaParameters.TRANSMISSION_POWERS
+
+        if config["slow_sf"]:
+            self.sf_range = range(-1, 2)
+        else:
+            self.sf_range = LoRaParameters.SPREADING_FACTORS
+
+        if config["slow_channel"]:
+            self.channel_range = range(-1, 2)
+        else:
+            self.channel_range = LoRaParameters.DEFAULT_CHANNELS
+
+        for tp in self.tp_range:
+            for sf in self.sf_range:
+                for ch in self.channel_range:
                     tensor = torch.tensor([tp, sf, ch])
                     self.index_to_action.append(tensor)
                     self.action_to_index[tensor] = curr_idx
                     curr_idx += 1
+        self.action_size = curr_idx
 
-        self.action_size = 90
-        # Define the optimiser which is used when updating the Q-network. The learning rate determines how big each gradient step is during backpropagation.
+        # Initialize Q-network and Target network.
+        self.env = env
+        # self.q_network = Network(input_dimensions=len(config["state_space"]), output_dimensions=self.action_size, depth=depth)
+        self.q_network = Network(input_dimensions=len(config["state_space"]), output_dimensions=self.action_size, depth=depth).to(config["device"])
+        # self.target_network = Network(input_dimensions=len(config["state_space"]), output_dimensions=self.action_size, depth=depth)
+        self.target_network = Network(input_dimensions=len(config["state_space"]), output_dimensions=self.action_size, depth=depth).to(config["device"])
+        self.target_network.load_state_dict(self.q_network.state_dict())
+
         self.optimiser = torch.optim.Adam(self.q_network.parameters(), lr=lr)
-        self.gamma = gamma
-        self.epsilon = epsilon
+        self.gamma = config["gamma"]
+        self.epsilon = config["epsilon"]
 
         self.losses = {}
 
         self.buffer = ReplayBuffer(50)
         self.batch_size = 10
         self.lr = lr
-        self.target_upd_cnt= 0
-        self.target_upd_cond = 10
+        self.target_update_counter= 0
+        self.target_update_rate = 10
+        self.device = config["device"]
+        self.config = config
+
+        # start with epsilon = 1 / 2
+        self.epsilon_counter = 2
+
+        # start with learning rate 1 / 2^1
+        self.alpha_counter = 1
 
     def assign_nodes(self, nodes):
 
@@ -183,7 +229,11 @@ class DeepLearningAgent:
 
     def choose_next_action(self, curr_s):
         # curr_s = self.current_s()
+
+        curr_s = curr_s.to(self.device)
         output = self.q_network(curr_s)
+        output = output.cpu()
+
         max_action = torch.max(output)
         pi = []
         max_found = False
@@ -193,6 +243,11 @@ class DeepLearningAgent:
                 max_found = True
             else:
                 pi.append(self.epsilon / self.action_size)
+
+        if (self.config["GLIE"]):
+            # Update epsilon to ensure convergence according to GLIE
+            self.epsilon_counter += 1
+            self.epsilon = 1 / self.epsilon_counter
 
         pi[-1] = 1 - sum(pi[:-1])
 
@@ -210,15 +265,12 @@ class DeepLearningAgent:
         ret = self.index_to_action[output.detach().numpy().tolist().index(selected_value)]
         return ret
 
-    # Function that is called whenever we want to train the Q-network. Each call to this function takes in a transition tuple containing the data we use to update the Q-network.
     def train_q_network(self, transition):
 
-        # Set all the gradients stored in the optimiser to zero.
         self.optimiser.zero_grad()
 
         if not self.replay_buffer or self.sarsa:
 
-            # Calculate the loss for this transition.
             loss = self._calculate_loss(transition)
 
         else:
@@ -231,57 +283,27 @@ class DeepLearningAgent:
             transitions, positions = self.buffer.sample(self.batch_size)
             loss = self._calculate_batch_loss(transitions, positions)
 
-            self.target_upd_cnt += 1
+            self.target_update_counter += 1
 
             if (self.double_deep):
                 # Synchronize Q and Target Networks every now and then
-                if self.target_upd_cnt == self.target_upd_cond:
-                    self.target_upd_cnt = 0
+                if self.target_update_counter == self.target_update_rate:
+                    self.target_update_counter = 0
                     self.target_network.load_state_dict(self.q_network.state_dict())
 
-        # Compute the gradients based on this loss, i.e. the gradients of the loss with respect to the Q-network parameters.
         loss.backward()
 
-        # Take one gradient step to update the Q-network.
+        if len(self.optimiser.param_groups) > 1:
+            raise Exception("Number of parameter groups for the optimizer is more than one")
+
+        if self.config["Robbins-Monroe"]:
+            self.lr  = 1 / (2 ** self.alpha_counter)
+            self.optimiser.param_groups[0]['lr'] = self.lr
+            self.alpha_counter += 1
+
         self.optimiser.step()
 
-        # Return the loss as a scalar
         return loss.item()
-
-    def _calculate_batch_loss_old(self, transitions):
-        # transition — (s, a, r, s')
-
-        transposed = list(zip(*transitions))
-
-        states = torch.cat([s.unsqueeze(0) for s in transposed[0]])
-        actions = torch.cat([torch.tensor([self.action_to_index[a]], dtype=torch.int64).unsqueeze(0) for a in transposed[1]])
-        rewards = torch.cat([torch.tensor([r]).unsqueeze(0) for r in transposed[2]])
-
-        next_states = torch.cat([ns.unsqueeze(0) for ns in transposed[3]])
-
-        if self.sarsa:
-            ### TODO This line is too complicated, need to implement choose_next_action for batch input ###
-            raise Exception("Shouldn't reach this code! Cannot implement Replay Buffer for SARSA!")
-            next_actions = torch.cat([torch.tensor([self.action_to_index[self.choose_next_action(ns)]], dtype=torch.int64).unsqueeze(0) for ns in transposed[3]])
-            target = rewards + self.gamma * self.q_network(next_states).gather(1, next_actions)
-        else:
-            ### the same operation broken down ###
-            # temp = self.q_network(next_states)
-            # temp = torch.max(temp, dim=1)[0]
-            # temp = temp.detach()
-            # temp = temp.squeeze(0).view(self.batch_size, 1)
-            temp = torch.max(self.q_network(next_states), dim=1)[0].detach().squeeze(0).view(self.batch_size, 1)
-            target = rewards + temp * self.gamma
-
-        predicted = self.q_network(states)
-        predicted = predicted.gather(1, actions)
-
-        loss = torch.nn.MSELoss()
-        loss = loss(target, predicted)
-
-        self.losses[self.env.now] = loss
-
-        return loss
 
     def _calculate_batch_loss(self, transitions, positions):
         # transition — (s, a, r, s')
@@ -313,23 +335,34 @@ class DeepLearningAgent:
 
                 # Simple implementation of Target Network optimization
                 # temp = torch.max(self.target_network(next_states), dim=1)[0].detach().squeeze(0).view(self.batch_size, 1)
+                temp = self.target_network(next_states).cpu()
+                optimal_action_indexes = torch.argmax(temp, dim=1)
 
-                optimal_action_indexes = torch.argmax(self.target_network(next_states), dim=1)
-                temp = torch.tensor([q[i] for (q, i) in zip(self.q_network(next_states), optimal_action_indexes)]).squeeze(0).view(self.batch_size, 1)
+                temp = self.q_network(next_states).cpu()
+                temp = torch.tensor([q[i] for (q, i) in zip(temp, optimal_action_indexes)]).squeeze(0).view(self.batch_size, 1)
 
             else:
 
-                temp = torch.max(self.q_network(next_states), dim=1)[0].detach().squeeze(0).view(self.batch_size, 1)
+                temp = self.q_network(next_states).cpu()
+                temp = torch.max(temp, dim=1)[0].detach().squeeze(0).view(self.batch_size, 1)
 
             target = rewards + temp * self.gamma
 
-        predicted = self.q_network(states)
+
+        predicted = self.q_network(states).cpu()
         predicted = predicted.gather(1, actions)
 
-        delta = target - predicted
-        loss = delta.pow(2)
+        # Commenting this code out, attempt to use squared loss value instead of absolute difference
+        # relative to each other the values should be the same (abs() and pow(2) are similar operations)
+        # delta = target - predicted
+        # loss = delta.pow(2)
 
-        weights = delta.abs() + 1e-5
+        # reduction="None" ensures loss is calculated across the whole batch
+        # 10 losses are produced (in one tensor of size [10, 1])
+        loss = torch.nn.MSELoss(reduction="none")
+        loss = loss(target.float(), predicted.float())
+
+        weights = loss + 1e-5
         weights = weights.squeeze(1).tolist()
         self.buffer.update_weights(positions, weights)
 
@@ -338,7 +371,6 @@ class DeepLearningAgent:
 
         return loss
 
-    # Function to calculate the loss for a particular transition.
     # transition = (s, a, r, s')
     def _calculate_loss(self, transition):
         s, a, reward, next_s = transition
@@ -347,13 +379,16 @@ class DeepLearningAgent:
             target = reward + self.gamma * self.q_network(next_s)[self.action_to_index[next_a]]
         else:
             if (self.double_deep):
-                target = reward + self.gamma * torch.max(self.target_network(next_s))
+                temp = self.target_network(next_s).cpu()
+                target = reward + self.gamma * torch.max(temp)
             else:
-                target = reward + self.gamma * torch.max(self.q_network(next_s))
+                temp = self.q_network(next_s).cpu()
+                target = reward + self.gamma * torch.max(temp)
 
         # is_it = a in self.index_to_action
         # print(is_it)
         predicted = self.q_network(s)
+        # predicted = self.q_network(s).cpu()
         predicted = predicted[self.action_to_index[a]]
         loss = torch.nn.MSELoss()
         loss = loss(target, predicted)
@@ -374,8 +409,8 @@ class Network(torch.nn.Module):
             layers.append(torch.nn.ReLU())
         layers.append(torch.nn.Linear(in_features=100, out_features=output_dimensions))
 
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.network = torch.nn.Sequential(*layers)
-
         # self.network = torch.nn.Sequential(
         #     torch.nn.Linear(in_features=input_dimensions, out_features=100),
         #     torch.nn.ReLU(),
@@ -385,6 +420,7 @@ class Network(torch.nn.Module):
         # )
 
     def forward(self, input):
+        x = input.to(self.device)
         return self.network(input)
 
 import random
@@ -436,3 +472,42 @@ class ReplayBuffer():
 
     def sizeof(self):
         return len(self.buffer)
+
+# Old versions of methods
+
+# old batch loss for DeepLearningAgent
+# def _calculate_batch_loss_old(self, transitions):
+    #     # transition — (s, a, r, s')
+    #
+    #     transposed = list(zip(*transitions))
+    #
+    #     states = torch.cat([s.unsqueeze(0) for s in transposed[0]])
+    #     actions = torch.cat([torch.tensor([self.action_to_index[a]], dtype=torch.int64).unsqueeze(0) for a in transposed[1]])
+    #     rewards = torch.cat([torch.tensor([r]).unsqueeze(0) for r in transposed[2]])
+    #
+    #     next_states = torch.cat([ns.unsqueeze(0) for ns in transposed[3]])
+    #
+    #     if self.sarsa:
+    #         ### TODO This line is too complicated, need to implement choose_next_action for batch input ###
+    #         raise Exception("Shouldn't reach this code! Cannot implement Replay Buffer for SARSA!")
+    #         next_actions = torch.cat([torch.tensor([self.action_to_index[self.choose_next_action(ns)]], dtype=torch.int64).unsqueeze(0) for ns in transposed[3]])
+    #         target = rewards + self.gamma * self.q_network(next_states).gather(1, next_actions)
+    #     else:
+    #         ### the same operation broken down ###
+    #         # temp = self.q_network(next_states)
+    #         # temp = torch.max(temp, dim=1)[0]
+    #         # temp = temp.detach()
+    #         # temp = temp.squeeze(0).view(self.batch_size, 1)
+    #         temp = torch.max(self.q_network(next_states), dim=1)[0].detach().squeeze(0).view(self.batch_size, 1)
+    #         target = rewards + temp * self.gamma
+    #
+    #     predicted = self.q_network(states)
+    #     predicted = predicted.gather(1, actions)
+    #
+    #     loss = torch.nn.MSELoss()
+    #     loss = loss(target, predicted)
+    #
+    #     self.losses[self.env.now] = loss
+    #
+    #     return loss
+

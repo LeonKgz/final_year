@@ -63,6 +63,9 @@ class LearningAgent:
         # start with epsilon = 1 / 2
         self.epsilon_counter = 2
 
+        # start with learning rate 1 / 2^1
+        self.alpha_counter = 1
+
     def convert_state_to_index(self, s):
         tp_S, sf_S, channel_S = s
         return (LoRaParameters.TRANSMISSION_POWERS.index(tp_S),
@@ -147,6 +150,11 @@ class LearningAgent:
         else:
             self.q_table[s_index][a_index] = q_s_a + self.alpha * (reward + self.gamma * max_q_s_a - q_s_a)
 
+        if self.config["Robbins-Monroe"]:
+            self.alpha = 1 / (2 ** self.alpha_counter)
+            self.alpha_counter += 1
+
+
 class DeepLearningAgent:
 
     def __init__(self, env, depth, config, lr=0.001):
@@ -213,19 +221,30 @@ class DeepLearningAgent:
         self.config = config
 
         # start with epsilon = 1 / 2
-        self.epsilon_counter = 2
+        # this counter determines the current epsilon value
+        self.epsilon_value_counter = 2
+        # these counters determine when the epsilon value is updated
+        self.epsilon_update_counter = 0
+        self.epsilon_update_rate = None
 
         # start with learning rate 1 / 2^1
-        self.alpha_counter = 1
+        # this counter determines the current alpha value
+        self.alpha_value_counter = 1
+        # these counters determine when the epsilon value is updated
+        self.alpha_update_counter = 0
+        self.alpha_update_rate = None
 
     def assign_nodes(self, nodes):
-
-        if (len(nodes) == 0):
+        num_nodes = len(nodes)
+        if (num_nodes == 0):
             raise Exception("Empty cluster of nodes is being passed to the Learning Agent")
 
         self.nodes = nodes
         for node in nodes:
             node.assign_learning_agent(agent=self)
+
+        self.epsilon_update_rate = num_nodes
+        self.alpha_update_rate = num_nodes
 
     def choose_next_action(self, curr_s):
         # curr_s = self.current_s()
@@ -244,10 +263,12 @@ class DeepLearningAgent:
             else:
                 pi.append(self.epsilon / self.action_size)
 
-        if (self.config["GLIE"]):
+        self.epsilon_update_counter += 1
+        if (self.config["GLIE"] and self.epsilon_update_counter == self.epsilon_update_rate):
             # Update epsilon to ensure convergence according to GLIE
-            self.epsilon_counter += 1
-            self.epsilon = 1 / self.epsilon_counter
+            self.epsilon_value_counter += 1
+            self.epsilon = 1 / self.epsilon_value_counter
+            self.epsilon_update_counter = 0
 
         pi[-1] = 1 - sum(pi[:-1])
 
@@ -296,10 +317,12 @@ class DeepLearningAgent:
         if len(self.optimiser.param_groups) > 1:
             raise Exception("Number of parameter groups for the optimizer is more than one")
 
-        if self.config["Robbins-Monroe"]:
-            self.lr  = 1 / (2 ** self.alpha_counter)
+        self.alpha_update_counter += 1
+        if (self.config["Robbins-Monroe"] and self.alpha_update_counter == self.alpha_update_rate):
+            self.lr = 1 / (2 ** self.alpha_value_counter)
             self.optimiser.param_groups[0]['lr'] = self.lr
-            self.alpha_counter += 1
+            self.alpha_value_counter += 1
+            self.alpha_update_counter = 0
 
         self.optimiser.step()
 

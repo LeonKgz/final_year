@@ -175,7 +175,7 @@ def compare_before_and_after(configurations, save_to_local=False):
         num_categories = len(list(nodes[0].rl_measurements.keys()))
 
         if first_run:
-            num_columns = len(configurations)
+            num_columns = len(configurations) + 1
             num_rows = num_categories * 2 + 3
             # adding 3 additional plots for simulation info at the top, loss and results at the bottom
             f, axarr = plt.subplots(num_rows, num_columns, figsize=(num_columns * 7, num_rows * 5),
@@ -287,10 +287,20 @@ def compare_before_and_after(configurations, save_to_local=False):
                 axarr[temp].set_ylabel(f"{parameter} AVERAGE per Node")
                 axarr[temp].set_title(config["title"])
             else:
-                axarr[temp][config_cnt].plot(list(avg_per_parameter[parameter].keys()), list(avg_per_parameter[parameter].values()))
+                axarr[temp][config_cnt].plot(list(avg_per_parameter[parameter].keys()),
+                                             list(avg_per_parameter[parameter].values()),
+                                             label=list(avg_per_parameter[parameter].values())[-1])
                 axarr[temp][config_cnt].set_xlabel("Time")
                 axarr[temp][config_cnt].set_ylabel(f"{parameter} AVERAGE per Node")
                 axarr[temp][config_cnt].set_title(config["title"])
+                axarr[temp][config_cnt].legend()
+
+                axarr[temp][-1].plot(list(avg_per_parameter[parameter].keys()),
+                                             list(avg_per_parameter[parameter].values()), label=config["label"])
+                axarr[temp][-1].set_xlabel("Time")
+                axarr[temp][-1].set_ylabel(f"{parameter} AVERAGE per Node")
+                axarr[temp][-1].set_title("Comparison")
+                axarr[temp][-1].legend()
 
         # Plotting losses for deep learning agents
         agent_id = 0
@@ -371,7 +381,7 @@ def generate_config(config):
         "save": False,
         "num_nodes": num_nodes,
         "reward": normal_reward,
-        "days": 10,
+        "days": 3,
         "locations": locations,
         "state_space": ["tp", "sf", "channel"],
         "sector_size": 100,
@@ -395,12 +405,16 @@ def generate_config(config):
     return standard_body
 
 no_adr_no_conf_config = generate_config({
-    "title": "NO ADR NO CONF"})
+    "title": "NO ADR NO CONF",
+    "label": "nothing",
+})
 
 adr_conf_config = generate_config({
     "title": "ADR CONF",
     "conf": True,
-    "adr": True})
+    "adr": True,
+    "label": "adr, conf",
+})
 # plot_air_packages(configurations=configurations)
 
 # config_global = [
@@ -424,7 +438,8 @@ config_global = [
     # "Replay buffer and double deep",
     [
         "Applying all optimizations with sector size 50",
-        # no_adr_no_conf_config,
+        no_adr_no_conf_config,
+        adr_conf_config
         # {
         #     "title": "Deep Q learning",
         #     "training": True,
@@ -469,19 +484,19 @@ config_global = [
         #     "state_space": ["tp", "sf", "channel", "sinr", "rss"],
         #     "days": 30,
         # },
-        {
-            "title": "Deep Q learning",
-            "training": True,
-            "deep": True,
-            "double_deep": True,
-            "replay_buffer": True,
-            "GLIE": True,
-            "slow_epsilon": True,
-            "slow_alpha": True,
-            "Robbins-Monroe": True,
-            "state_space": ["tp", "sf", "channel", "sinr", "rss"],
-            "days": 10,
-        },
+        # {
+        #     "title": "Deep Q learning",
+        #     "training": True,
+        #     "deep": True,
+        #     "double_deep": True,
+        #     "replay_buffer": True,
+        #     "GLIE": True,
+        #     "slow_epsilon": True,
+        #     "slow_alpha": True,
+        #     "Robbins-Monroe": True,
+        #     "state_space": ["tp", "sf", "channel", "sinr", "rss"],
+        #     "days": 10,
+        # },
     ],
 ]
 

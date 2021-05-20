@@ -263,12 +263,17 @@ class DeepLearningAgent:
             else:
                 pi.append(self.epsilon / self.action_size)
 
-        self.epsilon_update_counter += 1
-        if (self.config["GLIE"] and self.epsilon_update_counter == self.epsilon_update_rate):
-            # Update epsilon to ensure convergence according to GLIE
-            self.epsilon_value_counter += 1
-            self.epsilon = 1 / self.epsilon_value_counter
-            self.epsilon_update_counter = 0
+        if (self.config["GLIE"] ):
+            if self.config["slow_epsilon"]:
+                self.epsilon_update_counter += 1
+                if self.epsilon_update_counter == self.epsilon_update_rate:
+                    # Update epsilon to ensure convergence according to GLIE
+                    self.epsilon = 1 / self.epsilon_value_counter
+                    self.epsilon_value_counter += 1
+                    self.epsilon_update_counter = 0
+            else:
+                self.epsilon_value_counter += 1
+                self.epsilon = 1 / self.epsilon_value_counter
 
         pi[-1] = 1 - sum(pi[:-1])
 
@@ -317,12 +322,19 @@ class DeepLearningAgent:
         if len(self.optimiser.param_groups) > 1:
             raise Exception("Number of parameter groups for the optimizer is more than one")
 
-        self.alpha_update_counter += 1
-        if (self.config["Robbins-Monroe"] and self.alpha_update_counter == self.alpha_update_rate):
-            self.lr = 1 / (2 ** self.alpha_value_counter)
-            self.optimiser.param_groups[0]['lr'] = self.lr
-            self.alpha_value_counter += 1
-            self.alpha_update_counter = 0
+
+        if (self.config["Robbins-Monroe"]):
+            if (self.config["slow_alpha"]):
+                self.alpha_update_counter += 1
+                if (self.alpha_update_counter == self.alpha_update_rate):
+                    self.lr = 1 / (2 ** self.alpha_value_counter)
+                    self.optimiser.param_groups[0]['lr'] = self.lr
+                    self.alpha_value_counter += 1
+                    self.alpha_update_counter = 0
+            else:
+                self.lr = 1 / (2 ** self.alpha_value_counter)
+                self.optimiser.param_groups[0]['lr'] = self.lr
+                self.alpha_value_counter += 1
 
         self.optimiser.step()
 

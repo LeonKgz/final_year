@@ -218,10 +218,7 @@ def compare_before_and_after(configurations, save_to_local=False):
                     config["sector_size"],
             )
 
-            if (config["deep"]):
-                simulation_results += "Learning rate — {}".format(agents[0].lr)
-            else:
-                simulation_results += "Alpha — {}".format(agents[0].alpha)
+            simulation_results += "Learning rate (Alpha) — {}".format(agents[0].alpha)
 
             if (len(configurations) == 1):
                 axarr[0].text(0.1, 0.9, simulation_results, fontsize=20, bbox=props, verticalalignment='top', transform=axarr[0].transAxes)

@@ -168,16 +168,18 @@ class LearningAgent:
 
     def update_alpha(self):
         if (self.config["Robbins-Monroe"]):
-            if (self.config["alpha_decay_rate"] != -1):
+            if (self.config["slow_alpha"]):
                 self.alpha_update_counter += 1
                 if (self.alpha_update_counter == self.alpha_update_rate):
-                    self.lr = 1 / (2 ** self.alpha_value_counter)
-                    self.optimiser.param_groups[0]['lr'] = self.lr
+                    self.alpha = 1 / (2 ** self.alpha_value_counter)
+                    if (self.config["deep"]):
+                      self.optimiser.param_groups[0]['lr'] = self.alpha
                     self.alpha_value_counter += 1
                     self.alpha_update_counter = 0
             else:
-                self.lr = 1 / (2 ** self.alpha_value_counter)
-                self.optimiser.param_groups[0]['lr'] = self.lr
+                self.alpha = 1 / (2 ** self.alpha_value_counter)
+                if (self.config["deep"]):
+                  self.optimiser.param_groups[0]['lr'] = self.alpha
                 self.alpha_value_counter += 1
 
     def deep_train_q_network(self, transition):

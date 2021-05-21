@@ -411,8 +411,8 @@ def generate_config(config):
         "device": torch.device("cuda" if torch.cuda.is_available() else "cpu"),
         "GLIE": False,
         "Robbins-Monroe": False,
-        "slow_epsilon": False,
-        "slow_alpha": False,
+        "epsilon_decay_rate": -1,
+        "alpha_decay_rate": -1,
     }
 
     for (key, val) in config.items():

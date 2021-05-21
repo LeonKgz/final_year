@@ -100,8 +100,8 @@ class LearningAgent:
         for node in nodes:
             node.assign_learning_agent(agent=self)
 
-        self.epsilon_update_rate = num_nodes
-        self.alpha_update_rate = num_nodes
+        self.epsilon_update_rate = num_nodes * self.config["epsilon_decay_rate"]
+        self.alpha_update_rate = num_nodes * self.config["alpha_decay_rate"]
 
     def convert_state_to_index(self, s):
         tp_S, sf_S, channel_S = s
@@ -128,7 +128,7 @@ class LearningAgent:
                 pi.append(self.epsilon / self.action_size)
 
         if (self.config["GLIE"] ):
-            if self.config["slow_epsilon"]:
+            if (self.config["epsilon_decay_rate"] != -1):
                 self.epsilon_update_counter += 1
                 if self.epsilon_update_counter == self.epsilon_update_rate:
                     # Update epsilon to ensure convergence according to GLIE
@@ -168,7 +168,7 @@ class LearningAgent:
 
     def update_alpha(self):
         if (self.config["Robbins-Monroe"]):
-            if (self.config["slow_alpha"]):
+            if (self.config["alpha_decay_rate"] != -1):
                 self.alpha_update_counter += 1
                 if (self.alpha_update_counter == self.alpha_update_rate):
                     self.lr = 1 / (2 ** self.alpha_value_counter)

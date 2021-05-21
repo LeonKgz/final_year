@@ -160,6 +160,14 @@ def plot_air_packages(configurations):
         nodes, agents, env = init_nodes(config=config)
         run_nodes(nodes, env, days=config["days"])
 
+def health_check(configurations, days=1):
+    print("##################          Health check             ###################")
+    for config_cnt, config in enumerate(configurations):
+        simulation_time = days * 1000 * 60 * 60 * 24
+        nodes, agents, env = init_nodes(config=config)
+        run_nodes(nodes, env, days=days, noma=config["noma"])
+    print("##################        Health check OKAY          ###################")
+
 def compare_before_and_after(configurations, save_to_local=False):
 
     first_run = True
@@ -522,7 +530,9 @@ for i in range(len(config_global)):
 
     for j in range(1, len(config_global[i])):
         config_global[i][j] = generate_config(config_global[i][j])
+
     print(f"\n\n\n STARTING SIMULATION: \t\t\t {config_global[i][0]} \n\n\n")
+    health_check(configurations=config_global[i][1:], days=1)
     compare_before_and_after(configurations=config_global[i][1:], save_to_local=True)
 
     print("\n\n\n#################################################################################################\n\n\n")

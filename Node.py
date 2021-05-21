@@ -111,7 +111,7 @@ class Node:
             # "energy_value": {},
             # "energy_total": {},
             "energy_per_bit": {},
-            "pkgs_in_air": {}
+            # "pkgs_in_air": {}
         }
 
         self.actions = []
@@ -892,7 +892,7 @@ class Node:
         # self.rl_measurements["energy_value"][self.env.now] = self.energy_value
         # self.rl_measurements["energy_total"][self.env.now] = self.total_energy_consumed()
         self.rl_measurements["energy_per_bit"][self.env.now] = latest_energy
-        self.rl_measurements["pkgs_in_air"][self.env.now] = len(self.air_interface.packages_in_air)
+        # self.rl_measurements["pkgs_in_air"][self.env.now] = len(self.air_interface.packages_in_air)
 
         return reward
 

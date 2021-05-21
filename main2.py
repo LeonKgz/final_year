@@ -163,7 +163,8 @@ def plot_air_packages(configurations):
 def compare_before_and_after(configurations, save_to_local=False):
 
     first_run = True
-    f, axarr = None, None
+    f_large, axarr_large = None, None
+    f_small, axarr_small = None, None
 
     for config_cnt, config in enumerate(configurations):
         simulation_time = config["days"]*1000*60*60*24
@@ -175,11 +176,17 @@ def compare_before_and_after(configurations, save_to_local=False):
         num_categories = len(list(nodes[0].rl_measurements.keys()))
 
         if first_run:
-            num_columns = len(configurations) + 1
-            num_rows = num_categories * 2 + 3
+            num_columns_large = len(configurations) + 1
+            num_rows_large = num_categories * 2 + 3
             # adding 3 additional plots for simulation info at the top, loss and results at the bottom
-            f, axarr = plt.subplots(num_rows, num_columns, figsize=(num_columns * 7, num_rows * 5),
+            f_large, axarr_large = plt.subplots(num_rows_large, num_columns_large, figsize=(num_columns_large * 7, num_rows_large * 5),
                                     sharex='col', sharey='row')
+
+            num_columns_small = num_categories
+            num_rows_small = 1
+            # adding 3 additional plots for simulation info at the top, loss and results at the bottom
+            f_small, axarr_small = plt.subplots(num_rows_small, num_columns_small, figsize=(num_columns_small * 7, num_rows_small * 5),
+                                                sharex=True)
 
         first_run = False
 
@@ -221,9 +228,9 @@ def compare_before_and_after(configurations, save_to_local=False):
             simulation_results += "Learning rate (Alpha) — {}".format(agents[0].alpha)
 
             if (len(configurations) == 1):
-                axarr[0].text(0.1, 0.9, simulation_results, fontsize=20, bbox=props, verticalalignment='top', transform=axarr[0].transAxes)
+                axarr_large[0].text(0.1, 0.9, simulation_results, fontsize=20, bbox=props, verticalalignment='top', transform=axarr_large[0].transAxes)
             else:
-                axarr[0][config_cnt].text(0.1, 0.9, simulation_results, fontsize=20, bbox=props, verticalalignment='top', transform=axarr[0][config_cnt].transAxes)
+                axarr_large[0][config_cnt].text(0.1, 0.9, simulation_results, fontsize=20, bbox=props, verticalalignment='top', transform=axarr_large[0][config_cnt].transAxes)
         simulation_info()
 
         # First simply plotting all the nodes at the same time, while also recording data for averaging later
@@ -237,15 +244,15 @@ def compare_before_and_after(configurations, save_to_local=False):
                 time = list(data_dict.keys())
                 vals = list(data_dict.values())
                 if (len(configurations) == 1):
-                    axarr[parameter_cnt * 2 + 1].plot(time, vals)
-                    axarr[parameter_cnt * 2 + 1].set_xlabel("Time")
-                    axarr[parameter_cnt * 2 + 1].set_ylabel(f"{parameter} per Node")
-                    axarr[parameter_cnt * 2 + 1].set_title(config["title"])
+                    axarr_large[parameter_cnt * 2 + 1].plot(time, vals)
+                    axarr_large[parameter_cnt * 2 + 1].set_xlabel("Time")
+                    axarr_large[parameter_cnt * 2 + 1].set_ylabel(f"{parameter} per Node")
+                    axarr_large[parameter_cnt * 2 + 1].set_title(config["title"])
                 else:
-                    axarr[parameter_cnt * 2 + 1][config_cnt].plot(time, vals)
-                    axarr[parameter_cnt * 2 + 1][config_cnt].set_xlabel("Time")
-                    axarr[parameter_cnt * 2 + 1][config_cnt].set_ylabel(f"{parameter} per Node")
-                    axarr[parameter_cnt * 2 + 1][config_cnt].set_title(config["title"])
+                    axarr_large[parameter_cnt * 2 + 1][config_cnt].plot(time, vals)
+                    axarr_large[parameter_cnt * 2 + 1][config_cnt].set_xlabel("Time")
+                    axarr_large[parameter_cnt * 2 + 1][config_cnt].set_ylabel(f"{parameter} per Node")
+                    axarr_large[parameter_cnt * 2 + 1][config_cnt].set_title(config["title"])
 
                 length_per_parameter[parameter] += len(time)
 
@@ -279,25 +286,36 @@ def compare_before_and_after(configurations, save_to_local=False):
             temp = (parameter_cnt * 2) + 2
 
             if (len(configurations) == 1):
-                axarr[temp].plot(list(avg_per_parameter[parameter].keys()), list(avg_per_parameter[parameter].values()))
-                axarr[temp].set_xlabel("Time")
-                axarr[temp].set_ylabel(f"{parameter} AVERAGE per Node")
-                axarr[temp].set_title(config["title"])
+                axarr_large[temp].plot(list(avg_per_parameter[parameter].keys()), list(avg_per_parameter[parameter].values()))
+                axarr_large[temp].set_xlabel("Time")
+                axarr_large[temp].set_ylabel(f"{parameter} AVERAGE per Node")
+                axarr_large[temp].set_title(config["title"])
             else:
-                axarr[temp][config_cnt].plot(list(avg_per_parameter[parameter].keys()),
+                axarr_large[temp][config_cnt].plot(list(avg_per_parameter[parameter].keys()),
                                              list(avg_per_parameter[parameter].values()),
                                              label=list(avg_per_parameter[parameter].values())[-1])
-                axarr[temp][config_cnt].set_xlabel("Time")
-                axarr[temp][config_cnt].set_ylabel(f"{parameter} AVERAGE per Node")
-                axarr[temp][config_cnt].set_title(config["title"])
-                axarr[temp][config_cnt].legend()
+                axarr_large[temp][config_cnt].set_xlabel("Time")
+                axarr_large[temp][config_cnt].set_ylabel(f"{parameter} AVERAGE per Node")
+                axarr_large[temp][config_cnt].set_title(config["title"])
+                axarr_large[temp][config_cnt].legend()
 
-                axarr[temp][-1].plot(list(avg_per_parameter[parameter].keys()),
+                # Plotting all mean plots together in the last solumn of the large plot
+                axarr_large[temp][-1].plot(list(avg_per_parameter[parameter].keys()),
                                              list(avg_per_parameter[parameter].values()), label=config["label"])
-                axarr[temp][-1].set_xlabel("Time")
-                axarr[temp][-1].set_ylabel(f"{parameter} AVERAGE per Node")
-                axarr[temp][-1].set_title("Comparison")
-                axarr[temp][-1].legend()
+                axarr_large[temp][-1].set_xlabel("Time")
+                axarr_large[temp][-1].set_ylabel(f"{parameter} AVERAGE per Node")
+                axarr_large[temp][-1].set_title("Comparison")
+                axarr_large[temp][-1].legend()
+
+
+                # Plotting all mean plots together in the small plot
+
+                axarr_small[parameter_cnt].plot(list(avg_per_parameter[parameter].keys()),
+                                        list(avg_per_parameter[parameter].values()), label=config["label"])
+                axarr_small[parameter_cnt].set_xlabel("Time")
+                axarr_small[parameter_cnt].set_ylabel(f"{parameter} - mean per node")
+                axarr_small[parameter_cnt].set_title("")
+                axarr_small[parameter_cnt].legend()
 
         # Plotting losses for deep learning agents
         agent_id = 0
@@ -305,17 +323,17 @@ def compare_before_and_after(configurations, save_to_local=False):
             losses = agent.losses
 
             if (len(configurations) == 1):
-                axarr[-2].plot(list(losses.keys()), list(losses.values()), label=agent_id)
+                axarr_large[-2].plot(list(losses.keys()), list(losses.values()), label=agent_id)
                 agent_id += 1
-                axarr[-2].set_xlabel("Time")
-                axarr[-2].set_ylabel("Loss per Agent")
-                axarr[-2].set_title(config["title"])
+                axarr_large[-2].set_xlabel("Time")
+                axarr_large[-2].set_ylabel("Loss per Agent")
+                axarr_large[-2].set_title(config["title"])
             else:
-                axarr[-2][config_cnt].plot(list(losses.keys()), list(losses.values()), label=agent_id)
+                axarr_large[-2][config_cnt].plot(list(losses.keys()), list(losses.values()), label=agent_id)
                 agent_id += 1
-                axarr[-2][config_cnt].set_xlabel("Time")
-                axarr[-2][config_cnt].set_ylabel("Loss per Agent")
-                axarr[-2][config_cnt].set_title(config["title"])
+                axarr_large[-2][config_cnt].set_xlabel("Time")
+                axarr_large[-2][config_cnt].set_ylabel("Loss per Agent")
+                axarr_large[-2][config_cnt].set_title(config["title"])
 
         def simulation_results():
 
@@ -340,11 +358,11 @@ def compare_before_and_after(configurations, save_to_local=False):
             )
 
             if (len(configurations) == 1):
-                axarr[-1].text(0.1, 0.9, simulation_results, fontsize=20, bbox=props, verticalalignment='top',
-                              transform=axarr[-1].transAxes)
+                axarr_large[-1].text(0.1, 0.9, simulation_results, fontsize=20, bbox=props, verticalalignment='top',
+                              transform=axarr_large[-1].transAxes)
             else:
-                axarr[-1][config_cnt].text(0.1, 0.9, simulation_results, fontsize=20, bbox=props, verticalalignment='top',
-                                          transform=axarr[-1][config_cnt].transAxes)
+                axarr_large[-1][config_cnt].text(0.1, 0.9, simulation_results, fontsize=20, bbox=props, verticalalignment='top',
+                                          transform=axarr_large[-1][config_cnt].transAxes)
         simulation_results()
 
     # if (save_to_local):
@@ -437,16 +455,16 @@ config_global = [
     [
         "Applying all optimizations with sector size 50",
         no_adr_no_conf_config,
-        adr_conf_config
-        # {
-        #     "title": "Deep Q learning",
-        #     "training": True,
-        #     "deep": True,
-        #     "double_deep": True,
-        #     "replay_buffer": True,
-        #     "state_space": ["tp", "sf", "channel", "sinr", "rss"],
-        #     "days": 30,
-        # },
+        adr_conf_config,
+        {
+            "title": "Deep Q learning",
+            "training": True,
+            "deep": True,
+            "double_deep": True,
+            "replay_buffer": True,
+            "state_space": ["tp", "sf", "channel", "sinr", "rss"],
+            "days": 5,
+        },
         # {
         #     "title": "Deep Q learning",
         #     "training": True,

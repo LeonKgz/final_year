@@ -328,7 +328,7 @@ class LearningAgent:
         # predicted = self.q_network(s).cpu()
         predicted = predicted[self.action_to_index[a]]
         loss = torch.nn.MSELoss()
-        loss = loss(target, predicted)
+        loss = loss(target.cpu(), predicted.cpu())
         self.losses[self.env.now] = loss
         return loss
 

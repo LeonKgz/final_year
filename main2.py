@@ -83,9 +83,9 @@ def init_nodes(config, agent_to_nodes=None):
         # axes.set_ylim([0, Config.CELL_SIZE])
 
         # Creation of clusters and assignment of one learning agent per cluster
-        print("Creating clusters of nodes...")
+        print("\nCreating clusters of nodes...\n")
         clusters = cluster_nodes(nodes, sector_size=config["sector_size"])
-        print("Finished creating clusters")
+        print("\nFinished creating clusters\n")
 
         # for cluster in clusters.keys():
         #     for node in clusters[cluster]:
@@ -161,12 +161,12 @@ def plot_air_packages(configurations):
         run_nodes(nodes, env, days=config["days"])
 
 def health_check(configurations, days=1):
-    print("##################          Health check             ###################")
+    print("\n##################          Health check             ###################")
     for config_cnt, config in enumerate(configurations):
         simulation_time = days * 1000 * 60 * 60 * 24
         nodes, agents, env = init_nodes(config=config)
         run_nodes(nodes, env, days=days, noma=config["noma"])
-    print("##################        Health check OKAY          ###################")
+    print("\n##################        Health check OKAY          ###################")
 
 def compare_before_and_after(configurations, save_to_local=False):
 
@@ -458,69 +458,73 @@ adr_conf_config = generate_config({
 #         },
 #     ],
 # ]
+
+# Hypertuning progression
+progression = [
+        {
+            "title": "",
+            "label": "default",
+        },
+        {
+            "title": "epsilon decay",
+            "label": "epsilon decay",
+            "GLIE": True,
+            "epsilon_decay_rate": 1,
+        },
+        {
+            "title": "alpha decay",
+            "label": "alpha decay",
+            "Robbins-Monroe": True,
+            "alpha_decay_rate": 1,
+        },
+        {
+            "title": "epsilon + alpha decay",
+            "label": "epsilon + alpha decay",
+            "GLIE": True,
+            "epsilon_decay_rate": 1,
+            "Robbins-Monroe": True,
+            "alpha_decay_rate": 1,
+        }]
+
 config_global = [
-    # "Replay buffer and double deep",
     [
-        "Applying all optimizations with sector size 50",
-        no_adr_no_conf_config,
-        adr_conf_config,
+        ### Simulation name
+        "Tabular Q learning convergence with epsilon and alpha decay rates equal to one",
+        ### Main Theme
+        {
+            "title": "Tabular Q learning",
+            "training": True,
+        },
+        ### Progression of hypertuning parameters
+        progression
+    ],
+    [
+        "SARSA tabular convergence with epsilon and alpha decay rates equal to one",
+        {
+            "title": "Tabular SARSA",
+            "training": True,
+            "sarsa": True,
+        },
+        progression
+    ],
+    [
+        "Deep Q learning convergence with epsilon and alpha decay rates equal to one",
         {
             "title": "Deep Q learning",
             "training": True,
             "deep": True,
-            "double_deep": True,
-            "replay_buffer": True,
-            "state_space": ["tp", "sf", "channel", "sinr", "rss"],
-            "days": 5,
         },
-        # {
-        #     "title": "Deep Q learning",
-        #     "training": True,
-        #     "deep": True,
-        #     "double_deep": True,
-        #     "replay_buffer": True,
-        #     "GLIE": True,
-        #     "Robbins-Monroe": True,
-        #     "state_space": ["tp", "sf", "channel", "sinr", "rss"],
-        #     "days": 30,
-        # },
-        # {
-        #     "title": "Deep Q learning",
-        #     "training": True,
-        #     "deep": True,
-        #     "double_deep": True,
-        #     "replay_buffer": True,
-        #     "GLIE": True,
-        #     "slow_epsilon": True,
-        #     "Robbins-Monroe": True,
-        #     "state_space": ["tp", "sf", "channel", "sinr", "rss"],
-        #     "days": 30,
-        # },
-        # {
-        #     "title": "Deep Q learning",
-        #     "training": True,
-        #     "deep": True,
-        #     "double_deep": True,
-        #     "replay_buffer": True,
-        #     "GLIE": True,
-        #     "slow_alpha": True,
-        #     "Robbins-Monroe": True,
-        #     "state_space": ["tp", "sf", "channel", "sinr", "rss"],
-        #     "days": 30,
-        # },
-        # {
-        #     "title": "Deep Q learning",
-        #     "training": True,
-        #     "deep": True,
-        #     "double_deep": True,
-        #     "replay_buffer": True,
-        #     "GLIE": True,
-        #     "slow_epsilon": True,
-        #     "slow_alpha": True,
-        #     "Robbins-Monroe": True,
-        #     "state_space": ["tp", "sf", "channel", "sinr", "rss"],
-        #     "days": 10,
-        # },
+        progression
+    ],
+    [
+        "Deep SARSA convergence with epsilon and alpha decay rates equal to one",
+        {
+            "title": "Tabular SARSA",
+            "training": True,
+            "deep": True,
+            "sarsa": True,
+        },
+        progression
     ],
 ]
 
@@ -528,11 +532,27 @@ config_global = [
 # Still to try buffer with new optimizations
 for i in range(len(config_global)):
 
-    for j in range(1, len(config_global[i])):
-        config_global[i][j] = generate_config(config_global[i][j])
+    main_theme = config_global[i][1]
+    configs_result = []
+
+    for curr_config in config_global[i][2]:
+        # curr_config = config_global[i][j]
+        # Applying the main theme, combining 2 titles together
+        title = main_theme["title"] + ", " + curr_config["title"]
+        for (key, val) in main_theme.items():
+            curr_config[key] = val
+        curr_config["title"] = title
+
+        curr_config = generate_config(curr_config)
+        configs_result.append(curr_config)
 
     print(f"\n\n\n STARTING SIMULATION: \t\t\t {config_global[i][0]} \n\n\n")
-    health_check(configurations=config_global[i][1:], days=1)
-    compare_before_and_after(configurations=config_global[i][1:], save_to_local=True)
+    try:
+        health_check(configurations=configs_result, days=0.1)
+        compare_before_and_after(configurations=configs_result, save_to_local=True)
+    except Exception:
+        print(f"THERE WAS A PROBLEM RUNNING SIMULATION — {config_global[i][0]}")
+        print(f"THERE WAS A PROBLEM RUNNING SIMULATION — {config_global[i][0]}")
+        print(f"THERE WAS A PROBLEM RUNNING SIMULATION — {config_global[i][0]}")
 
     print("\n\n\n#################################################################################################\n\n\n")

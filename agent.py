@@ -10,6 +10,7 @@ class LearningAgent:
 
     def __init__(self, env, config):
         self.nodes = []
+        self.next_actions = {}
         self.config = config
         self.env = env
 
@@ -99,23 +100,31 @@ class LearningAgent:
         self.nodes = nodes
         for node in nodes:
             node.assign_learning_agent(agent=self)
+            if (self.sarsa):
+                state = node.current_s()
+                state = state.to(self.config["device"])
+                self.next_actions[node.id] = self.choose_next_action_epsilon_greedy(state, node_id=None)
 
         self.epsilon_update_rate = num_nodes * self.config["epsilon_decay_rate"]
         self.alpha_update_rate = num_nodes * self.config["alpha_decay_rate"]
 
-    def convert_state_to_index(self, s):
-        tp_S, sf_S, channel_S = s
+    def convert_state_to_index(self, state):
+        tp_S, sf_S, channel_S = state
         return (LoRaParameters.TRANSMISSION_POWERS.index(tp_S),
                 LoRaParameters.SPREADING_FACTORS.index(sf_S),
                 LoRaParameters.DEFAULT_CHANNELS.index(channel_S))
 
-    def choose_next_action(self, curr_s):
+    def choose_next_action_epsilon_greedy(self, curr_state, node_id):
+
+        if (self.sarsa and node_id != None):
+            return self.next_actions[node_id]
+
         if (self.config["deep"]):
-            curr_s = curr_s.to(self.device)
-            output = self.q_network(curr_s)
+            curr_state = curr_state.to(self.device)
+            output = self.q_network(curr_state)
             output = output.cpu()
         else:
-            output = self.q_table[self.convert_state_to_index(curr_s)]
+            output = self.q_table[self.convert_state_to_index(curr_state)]
 
         max_action = torch.max(output)
         pi = []
@@ -159,16 +168,109 @@ class LearningAgent:
         ret = self.index_to_action[output.detach().numpy().tolist().index(selected_value)]
         return ret
 
-    def train_q_network(self, transition):
+    def choose_next_action_average_of_two(self, curr_state):
+
+        if (not self.config["sarsa"] or not self.config["double_deep"] or not self.config["deep"]):
+            raise Exception("choose_next_action_average_of_two() can only be called in double deep SARSA")
+
+        # TODO implement for tabular
+        # if (self.config["deep"]):
+        #   curr_state = curr_state.to(self.device)
+        #   output = self.q_network(curr_state)
+        #   output = output.cpu()
+        # else:
+        #     output = self.q_table[self.convert_state_to_index(curr_state)]
+
+        curr_state = curr_state.to(self.device)
+
+        output_a = self.q_network(curr_state)
+        output_a = output_a.cpu()
+
+        output_b = self.target_network(curr_state)
+        output_b = output_b.cpu()
+
+        # max_action = torch.max(output_a) + torch.max(output_b)
+        max_action = torch.max(output_a + output_b)
+
+        pi = []
+        max_found = False
+        for a in output_a:
+            if (a + output_b[self.action_to_index[a]] == max_action and not max_found):
+                pi.append(1 - self.epsilon + (self.epsilon / self.action_size))
+                max_found = True
+            else:
+                pi.append(self.epsilon / self.action_size)
+
+        if (self.config["GLIE"] ):
+            if (self.config["epsilon_decay_rate"] != -1):
+                self.epsilon_update_counter += 1
+                if self.epsilon_update_counter == self.epsilon_update_rate:
+                    # Update epsilon to ensure convergence according to GLIE
+                    self.epsilon = 1 / self.epsilon_value_counter
+                    self.epsilon_value_counter += 1
+                    self.epsilon_update_counter = 0
+            else:
+                self.epsilon_value_counter += 1
+                self.epsilon = 1 / self.epsilon_value_counter
+
+        pi[-1] = 1 - sum(pi[:-1])
+
+        if (pi[-1] < 0):
+            print(f"Last value is negative: {pi[-1]}")
+            pi[-1] = 0
+            # TODO catch Value errors for weird pi values and report them
+
+        try:
+            selected_value = np.random.choice(output.detach().numpy(), p=pi)
+        except ValueError:
+            print("Problem with the pi values!")
+            exit(-1)
+
+        if (not self.config["deep"] and math.isnan(selected_value)):
+            # print("NAN ENCOUNTERED")
+            return random.choice(self.index_to_action)
+
+        ret = self.index_to_action[output.detach().numpy().tolist().index(selected_value)]
+        return ret
+
+    # Expected return value used in the Expected SARSA algorithm
+    def expected_action_value(self, state):
+        if (not self.config["expected_sarsa"]):
+            raise Exception("expected_action_value() should only be called in the Expected SARSA type algorithm")
+        ret = 0
         if (self.config["deep"]):
-            self.deep_train_q_network(transition)
+            state = state.to(self.device)
+            if (self.config["double_deep"]):
+                output = self.target_network(state)
+            else:
+                output = self.q_network(state)
+            output = output.cpu()
         else:
-            self.tabular_train_q_network(transition)
+            output = self.q_table[self.convert_state_to_index(state)]
+
+        max_action = torch.max(output)
+        max_found = False
+        for a in output:
+            if (a == max_action and not max_found):
+                pi = 1 - self.epsilon + (self.epsilon / self.action_size)
+                max_found = True
+                ret += pi * output[self.action_to_index[a]]
+            else:
+                pi = self.epsilon / self.action_size
+                ret += pi * output[self.action_to_index[a]]
+
+        return ret
+
+    def train_q_network(self, transition, node_id):
+        if (self.config["deep"]):
+            self.deep_train_q_network(transition, node_id)
+        else:
+            self.tabular_train_q_network(transition, node_id)
         self.update_alpha()
 
     def update_alpha(self):
         if (self.config["Robbins-Monroe"]):
-            if (self.config["slow_alpha"]):
+            if (self.config["alpha_decay_rate"] != -1):
                 self.alpha_update_counter += 1
                 if (self.alpha_update_counter == self.alpha_update_rate):
                     self.alpha = 1 / (2 ** self.alpha_value_counter)
@@ -182,12 +284,20 @@ class LearningAgent:
                   self.optimiser.param_groups[0]['lr'] = self.alpha
                 self.alpha_value_counter += 1
 
-    def deep_train_q_network(self, transition):
+    def deep_train_q_network(self, transition, node_id):
         self.optimiser.zero_grad()
 
         if not self.replay_buffer or self.sarsa:
 
-            loss = self._calculate_loss(transition)
+            loss = self._calculate_loss(transition, node_id)
+
+            if (self.sarsa and self.config["double_deep"]):
+
+                # swap two tables
+                if (np.random.uniform() > 0.5):
+                    state_dict_temp = self.q_network.state_dict()
+                    self.q_network.load_state_dict(self.target_network.state_dict())
+                    self.target_network.load_state_dict(state_dict_temp)
 
         else:
             # Implement replay buffer (reminder: cannot implement replay buffer for SARSA!)
@@ -217,11 +327,11 @@ class LearningAgent:
 
         return loss.item()
 
-    def tabular_train_q_network(self, transition):
+    def tabular_train_q_network(self, transition, node_id):
         s, a, reward, next_s = transition
 
         if self.sarsa:
-            next_a = self.choose_next_action(next_s)
+            next_a = self.choose_next_action_epsilon_greedy(next_s, node_id=node_id)
             next_a_index = self.action_to_index[next_a]
 
         s_index = self.convert_state_to_index(s)
@@ -311,11 +421,22 @@ class LearningAgent:
 
         # transition = (s, a, r, s')
 
-    def _calculate_loss(self, transition):
+    def _calculate_loss(self, transition, node_id):
         s, a, reward, next_s = transition
         if self.sarsa:
-            next_a = self.choose_next_action(next_s)
-            target = reward + self.gamma * self.q_network(next_s)[self.action_to_index[next_a]]
+            if self.config["double_deep"]:
+                if self.config["expected_sarsa"]:
+                    next_a = self.choose_next_action_average_of_two(next_s)
+                    self.next_actions[node_id] = next_a
+                    target = reward + self.gamma * self.expected_action_value(next_s)
+                else:
+                    next_a = self.choose_next_action_average_of_two(next_s)
+                    self.next_actions[node_id] = next_a
+                    target = reward + self.gamma * self.target_network(next_s)[self.action_to_index[next_a]]
+            else:
+                next_a = self.choose_next_action_epsilon_greedy(next_s, node_id)
+                self.next_actions[node_id] = next_a
+                target = reward + self.gamma * self.q_network(next_s)[self.action_to_index[next_a]]
         else:
             if (self.double_deep):
                 temp = self.target_network(next_s).cpu()

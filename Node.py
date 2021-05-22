@@ -196,7 +196,7 @@ class Node:
                 current_state = self.current_s()
                 # if isinstance(self.learning_agent, DeepLearningAgent):
                 #     current_state = current_state.to(self.learning_agent.device)
-                action = self.learning_agent.choose_next_action(current_state)
+                action = self.learning_agent.choose_next_action_epsilon_greedy(current_state)
                 self.take_action(action)
 
             random_wait = np.random.randint(0, Config.MAX_DELAY_BEFORE_SLEEP_MS)
@@ -232,7 +232,7 @@ class Node:
             if (self.training):
                 next_state = self.current_s()
                 transition = (current_state, action, reward, next_state)
-                self.learning_agent.train_q_network(transition)
+                self.learning_agent.train_q_network(transition, self.id)
 
             self.num_unique_packets_sent += 1  # at the end to be sure that this packet was tx
 
@@ -255,7 +255,7 @@ class Node:
                 current_state = self.current_s()
                 # if isinstance(self.learning_agent, DeepLearningAgent):
                 #         current_state = current_state.to(self.learning_agent.device)
-                action = self.learning_agent.choose_next_action(current_state)
+                action = self.learning_agent.choose_next_action_epsilon_greedy(current_state)
                 self.take_action(action)
 
             random_wait = np.random.randint(0, Config.MAX_DELAY_BEFORE_SLEEP_MS)
@@ -285,7 +285,7 @@ class Node:
             if (self.training):
                 next_state = self.current_s()
                 transition = (current_state, action, reward, next_state)
-                self.learning_agent.train_q_network(transition)
+                self.learning_agent.train_q_network(transition, self.id)
 
             self.num_unique_packets_sent += 1  # at the end to be sure that this packet was tx
 

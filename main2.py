@@ -4,7 +4,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import simpy
 import torch
-import subprocess
+import time
+import os
 
 import PropagationModel
 from AirInterface import AirInterface
@@ -83,9 +84,9 @@ def init_nodes(config, agent_to_nodes=None):
         # axes.set_ylim([0, Config.CELL_SIZE])
 
         # Creation of clusters and assignment of one learning agent per cluster
-        print("\nCreating clusters of nodes...\n")
+        print("\nCreating clusters of nodes...")
         clusters = cluster_nodes(nodes, sector_size=config["sector_size"])
-        print("\nFinished creating clusters\n")
+        print("Finished creating clusters\n")
 
         # for cluster in clusters.keys():
         #     for node in clusters[cluster]:
@@ -102,20 +103,15 @@ def init_nodes(config, agent_to_nodes=None):
         # plt.grid(True)
         # plt.show()
 
+        # start_time = time.perf_counter()
         for (cluster_center_location, cluster) in clusters.items():
-
-            # if config["deep"]:
-            #     agent = DeepLearningAgent(env=env, depth=config["depth"], config=config, lr=0.001)
-            # else:
-            #     agent = LearningAgent(env=env, config=config, alpha=0.5)
-
-            agent = LearningAgent(env=env, config=config)
 
             # making sure each agent is assigned to at least one node
             # TODO (problem of uneven distribution of nodes!)
-            # if len(cluster) > 0:
-            agent.assign_nodes(cluster)
-            agents.append(agent)
+            if len(cluster) > 0:
+                agent = LearningAgent(env=env, config=config)
+                agent.assign_nodes(cluster)
+                agents.append(agent)
     else:
         # No need to check for deep entry of the configuration since
         # only loading and saving of deep models has been implemented so far
@@ -160,7 +156,7 @@ def plot_air_packages(configurations):
         nodes, agents, env = init_nodes(config=config)
         run_nodes(nodes, env, days=config["days"])
 
-def health_check(configurations, days=1):
+def health_check(configurations, days):
     print("\n##################          Health check             ###################")
     for config_cnt, config in enumerate(configurations):
         simulation_time = days * 1000 * 60 * 60 * 24
@@ -168,12 +164,15 @@ def health_check(configurations, days=1):
         run_nodes(nodes, env, days=days, noma=config["noma"])
     print("\n##################        Health check OKAY          ###################")
 
-def compare_before_and_after(configurations, save_to_local=False):
+def run_configurations(configurations, file_name, save_to_local, main_theme, progression, rest):
 
     first_run = True
     f_large, axarr_large = None, None
     f_small, axarr_small = None, None
+    file_name_large = file_name
+    file_name_small = file_name + "_SMALL"
 
+    # plots all configs in configurations on one large plot, and duplicates most important data onto a smaller plot
     for config_cnt, config in enumerate(configurations):
         simulation_time = config["days"]*1000*60*60*24
         nodes, agents, env = init_nodes(config=config)
@@ -183,6 +182,7 @@ def compare_before_and_after(configurations, save_to_local=False):
         # basically number of plots in a column (times 2 for all nodes and average)
         num_categories = len(list(nodes[0].rl_measurements.keys()))
 
+        # Initializing all subplots and figures
         if first_run:
             num_columns_large = len(configurations) + 1
             num_rows_large = num_categories * 2 + 3
@@ -203,6 +203,7 @@ def compare_before_and_after(configurations, save_to_local=False):
         # sum_per_parameter = {}
         avg_per_parameter = {}
 
+        # Initializing recording for plotting mean value later
         for parameter in list(nodes[0].rl_measurements.keys()):
             times_per_parameter[parameter] = []
             length_per_parameter[parameter] = 0
@@ -373,13 +374,63 @@ def compare_before_and_after(configurations, save_to_local=False):
                                           transform=axarr_large[-1][config_cnt].transAxes)
         simulation_results()
 
-    # if (save_to_local):
-    #    subprocess.run()
+    def save_figures():
+
+        if (save_to_local):
+            # assuming that the local machine is running Windows
+            now = datetime.datetime.now()
+            current_date = now.strftime("%d.%m.%Y")
+            current_hour = now.strftime("%H")
+            save_dir_date = f"../Plot Diary/{current_date}/"
+            save_dir = f"../Plot Diary/{current_date}/{current_hour}/"
+            if (not os.path.exists(save_dir_date)):
+                os.mkdir(save_dir_date)
+        else:
+            # assuming that the NOT local machine is running Linux
+            save_dir = "./plots/"
+
+        if not os.path.exists(save_dir):
+            os.mkdir(save_dir)
+
+        name = save_dir + file_name_large + ".png"
+        f_large.savefig(name)
+        print(f"\nSaved plot {name}")
+
+        name = save_dir + file_name_small + ".png"
+        f_small.savefig(name)
+        print(f"Saved plot {name}")
+
+        name = save_dir + file_name_large + ".txt"
+        with open(name, 'w') as f:
+
+            def dict_to_str(dict, depth=0):
+                ret = "{"
+                for key, val in dict.items():
+                    tabs = "\t" + (depth * "\t")
+                    ret += f"\n{tabs}{key}: {val};"
+                tabs = (depth * "\t")
+                return ret + f"\n{tabs}" + "}"
+
+            def progression_to_str(progression):
+                ret = "["
+                for p in progression:
+                    ret += f"\n\t{dict_to_str(p, depth=1)},"
+                return ret + "\n]"
+
+            main_theme_dict = dict_to_str(main_theme)
+            progression_dict = progression_to_str(progression)
+            rest_dict = dict_to_str(rest)
+
+            input  = f"MAIN THEME \n\n {main_theme_dict} \n\n PROGRESSION \n\n {progression_dict} \n\n THE REST \n\n {rest_dict}"
+            f.write(input)
+            f.close()
+            print(f"Saved file {name}\n")
+    save_figures()
 
     plt.show()
 
 # Standard configuration values
-num_nodes = 1000
+num_nodes = 10
 locations = list()
 for i in range(num_nodes):
     locations.append(Location(min=0, max=Config.CELL_SIZE, indoor=False))
@@ -391,6 +442,7 @@ energy_reward = "energy"
 def generate_config(config):
     standard_body = {
         "title": "",
+        "file_name": "",
         "label": "",
         "conf": False,
         "adr": False,
@@ -410,8 +462,6 @@ def generate_config(config):
         "state_space": ["tp", "sf", "channel"],
         "sector_size": 100,
         "gamma": 0.5,
-        "epsilon": 0.5,
-        "alpha": 0.5,
         "slow_sf": False,
         "slow_tp": False,
         "slow_channel": False,
@@ -462,104 +512,116 @@ adr_conf_config = generate_config({
 
 # Hypertuning progression
 progression = [
-        {
-            "title": "",
-            "label": "default",
-        },
-        {
-            "title": "epsilon decay",
-            "label": "epsilon decay",
-            "GLIE": True,
-            "epsilon_decay_rate": 1,
-        },
-        # {
-        #     "title": "alpha decay",
-        #     "label": "alpha decay",
-        #     "Robbins-Monroe": True,
-        #     "alpha_decay_rate": 1,
-        # },
-        # {
-        #     "title": "epsilon + alpha decay",
-        #     "label": "epsilon + alpha decay",
-        #     "GLIE": True,
-        #     "epsilon_decay_rate": 1,
-        #     "Robbins-Monroe": True,
-        #     "alpha_decay_rate": 1,
-        # }
-    ]
+    {
+        "title": "",
+        "label": "default",
+    },
+    {
+        "title": "epsilon decay",
+        "label": "epsilon decay",
+        "GLIE": True,
+        "epsilon_decay_rate": 1,
+    },
+    {
+        "title": "alpha decay",
+        "label": "alpha decay",
+        "Robbins-Monroe": True,
+        "alpha_decay_rate": 1,
+    },
+    {
+        "title": "epsilon + alpha decay",
+        "label": "epsilon + alpha decay",
+        "GLIE": True,
+        "epsilon_decay_rate": 1,
+        "Robbins-Monroe": True,
+        "alpha_decay_rate": 1,
+    }]
 
 config_global = [
     [
-        ### Simulation name
-        "Tabular Q learning convergence with epsilon and alpha decay rates equal to one",
-        ### Main Theme
+        "deep_sarsa_decay",
         {
-            "title": "SARSA",
+            "title": "Deep SARSA",
             "training": True,
-            "deep": True,
             "sarsa": True,
-            "expected_sarsa": True,
-            "double_deep": True
+            "deep": True
         },
-        ### Progression of hypertuning parameters
         progression
     ],
-    # [
-    #     "SARSA tabular convergence with epsilon and alpha decay rates equal to one",
-    #     {
-    #         "title": "Tabular SARSA",
-    #         "training": True,
-    #         "sarsa": True,
-    #     },
-    #     progression
-    # ],
-    # [
-    #     "Deep Q learning convergence with epsilon and alpha decay rates equal to one",
-    #     {
-    #         "title": "Deep Q learning",
-    #         "training": True,
-    #         "deep": True,
-    #     },
-    #     progression
-    # ],
-    # [
-    #     "Deep SARSA convergence with epsilon and alpha decay rates equal to one",
-    #     {
-    #         "title": "Tabular SARSA",
-    #         "training": True,
-    #         "deep": True,
-    #         "sarsa": True,
-    #     },
-    #     progression
-    # ],
+    [
+        "deep_expected_sarsa_decay",
+        {
+            "title": "Deep Expected SARSA",
+            "training": True,
+            "sarsa": True,
+            "expected_sarsa": True,
+            "deep": True
+        },
+        progression
+    ],
+    [
+        "double_deep_sarsa_decay",
+        {
+            "title": "Double Deep SARSA",
+            "training": True,
+            "sarsa": True,
+            "double_deep": True,
+            "deep": True
+        },
+        progression
+    ],
+    [
+        "double_deep_expected_sarsa_decay",
+        {
+            "title": "Double Deep Expected SARSA",
+            "training": True,
+            "sarsa": True,
+            "expected_sarsa": True,
+            "double_deep": True,
+            "deep": True
+        },
+        progression
+    ],
 ]
-
-torch.autograd.set_detect_anomaly(True)
 
 # Still to try buffer with new optimizations
 for i in range(len(config_global)):
 
-    main_theme = config_global[i][1]
-    configs_result = []
+    simulation_name, main_theme, progression = config_global[i]
+    configs_combination_per_simulation = []
 
-    for curr_config in config_global[i][2]:
-        # curr_config = config_global[i][j]
+    for curr_config in progression:
+
+        temp = {}
+
+        # copying from curr_config. we still want to keep progression intact for printing purposes
+        for (key, val) in curr_config.items():
+            temp[key] = val
+
         # Applying the main theme, combining 2 titles together
-        title = main_theme["title"] + ", " + curr_config["title"]
+        title = main_theme["title"] + ", " + temp["title"]
         for (key, val) in main_theme.items():
-            curr_config[key] = val
-        curr_config["title"] = title
+            temp[key] = val
+        temp["title"] = title
 
-        curr_config = generate_config(curr_config)
-        configs_result.append(curr_config)
+        temp = generate_config(temp)
+        configs_combination_per_simulation.append(temp)
 
-    print(f"\n\n\n STARTING SIMULATION: \t\t\t {config_global[i][0]} \n\n\n")
-    # try:
-        # health_check(configurations=configs_result, days=0.1)
-    compare_before_and_after(configurations=configs_result, save_to_local=True)
-    # except Exception:
-    #     print(f"THERE WAS A PROBLEM RUNNING SIMULATION — {config_global[i][0]}")
-    #     print(f"THERE WAS A PROBLEM RUNNING SIMULATION — {config_global[i][0]}")
-    #     print(f"THERE WAS A PROBLEM RUNNING SIMULATION — {config_global[i][0]}")
+    print(f"\n\n\n STARTING SIMULATION: \t\t\t {simulation_name} \n\n\n")
+    try:
+        health_check(configurations=configs_combination_per_simulation, days=0.1)
+        run_configurations(configurations=configs_combination_per_simulation,
+                           save_to_local=True,
+                           file_name=config_global[i][0],
+                           main_theme=main_theme,
+                           progression=progression,
+                           rest=configs_combination_per_simulation[0],
+                           )
+    except Exception as e:
+        print(f"THERE WAS A PROBLEM RUNNING SIMULATION — {config_global[i][0]}")
+        print(f"THERE WAS A PROBLEM RUNNING SIMULATION — {config_global[i][0]}")
+        print(f"THERE WAS A PROBLEM RUNNING SIMULATION — {config_global[i][0]}")
+        print(e)
 
-    print("\n\n\n#################################################################################################\n\n\n")
+    print(
+        "\n\n\n#################################################################################################\n\n\n")

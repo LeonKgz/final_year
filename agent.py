@@ -20,9 +20,11 @@ class LearningAgent:
         self.mc = config["mc"]
         self.device = config["device"]
         self.gamma = config["gamma"]
-        self.epsilon = config["epsilon"]
-        self.alpha = config["alpha"]
         self.depth = config["depth"]
+
+        # epsilon and alpha will be given (starting!) values later when assigning nodes
+        self.epsilon = 0.5
+        self.alpha = 0.5
 
         self.index_to_action = []
         self.action_to_index = {}
@@ -102,8 +104,9 @@ class LearningAgent:
             node.assign_learning_agent(agent=self)
             if (self.sarsa):
                 state = node.current_s()
-                state = state.to(self.config["device"])
-                self.next_actions[node.id] = self.choose_next_action_epsilon_greedy(state, node_id=node.id, need_new_value=True)
+                if (self.config["deep"]):
+                    state = state.to(self.config["device"])
+                self.next_actions[node.id] = self.choose_next_action_epsilon_greedy(state, node_id=None)
 
         self.epsilon_update_rate = num_nodes * self.config["epsilon_decay_rate"]
         self.alpha_update_rate = num_nodes * self.config["alpha_decay_rate"]
@@ -116,6 +119,13 @@ class LearningAgent:
 
     def choose_next_action_epsilon_greedy(self, curr_state, node_id, need_new_value=False):
 
+        # this branch is executed at the start, when nodes are assigned to this lreaning agent
+        # a random action will suffice
+        if (self.sarsa and node_id == None):
+            return self.index_to_action[(int) (np.random.rand() * len(self.index_to_action))]
+
+        # this branch is executed when node is requesting next action (in SARSA setting)
+        # next action is already stored in the next_actions array, which is updated within _calculate_loss
         if (self.sarsa and not need_new_value):
             return self.next_actions[node_id]
 
@@ -433,9 +443,6 @@ class LearningAgent:
                     next_a = self.choose_next_action_average_of_two(next_s)
                     self.next_actions[node_id] = next_a
                     target = reward + self.gamma * self.expected_action_value(next_s)
-
-                    if (node_id == 12):
-                        print(next_a)
                 else:
                     next_a = self.choose_next_action_average_of_two(next_s)
                     self.next_actions[node_id] = next_a

@@ -103,7 +103,7 @@ class LearningAgent:
             if (self.sarsa):
                 state = node.current_s()
                 state = state.to(self.config["device"])
-                self.next_actions[node.id] = self.choose_next_action_epsilon_greedy(state, node_id=None)
+                self.next_actions[node.id] = self.choose_next_action_epsilon_greedy(state, node_id=node.id, need_new_value=True)
 
         self.epsilon_update_rate = num_nodes * self.config["epsilon_decay_rate"]
         self.alpha_update_rate = num_nodes * self.config["alpha_decay_rate"]
@@ -114,9 +114,9 @@ class LearningAgent:
                 LoRaParameters.SPREADING_FACTORS.index(sf_S),
                 LoRaParameters.DEFAULT_CHANNELS.index(channel_S))
 
-    def choose_next_action_epsilon_greedy(self, curr_state, node_id):
+    def choose_next_action_epsilon_greedy(self, curr_state, node_id, need_new_value=False):
 
-        if (self.sarsa and node_id != None):
+        if (self.sarsa and not need_new_value):
             return self.next_actions[node_id]
 
         if (self.config["deep"]):
@@ -190,12 +190,14 @@ class LearningAgent:
         output_b = output_b.cpu()
 
         # max_action = torch.max(output_a) + torch.max(output_b)
-        max_action = torch.max(output_a + output_b)
+        max_action = torch.max(output_a + output_b).detach()
 
         pi = []
         max_found = False
+        # self.index_to_action[output_a.detach().numpy().tolist().index(selected_value)]
         for a in output_a:
-            if (a + output_b[self.action_to_index[a]] == max_action and not max_found):
+            a_index = output_a.detach().numpy().tolist().index(a)
+            if (a.detach() + output_b[a_index].detach() == max_action and not max_found):
                 pi.append(1 - self.epsilon + (self.epsilon / self.action_size))
                 max_found = True
             else:
@@ -221,7 +223,7 @@ class LearningAgent:
             # TODO catch Value errors for weird pi values and report them
 
         try:
-            selected_value = np.random.choice(output.detach().numpy(), p=pi)
+            selected_value = np.random.choice(output_a.detach().numpy(), p=pi)
         except ValueError:
             print("Problem with the pi values!")
             exit(-1)
@@ -230,7 +232,7 @@ class LearningAgent:
             # print("NAN ENCOUNTERED")
             return random.choice(self.index_to_action)
 
-        ret = self.index_to_action[output.detach().numpy().tolist().index(selected_value)]
+        ret = self.index_to_action[output_a.detach().numpy().tolist().index(selected_value)]
         return ret
 
     # Expected return value used in the Expected SARSA algorithm
@@ -254,10 +256,10 @@ class LearningAgent:
             if (a == max_action and not max_found):
                 pi = 1 - self.epsilon + (self.epsilon / self.action_size)
                 max_found = True
-                ret += pi * output[self.action_to_index[a]]
+                ret += pi * a
             else:
                 pi = self.epsilon / self.action_size
-                ret += pi * output[self.action_to_index[a]]
+                ret += pi * a
 
         return ret
 
@@ -295,9 +297,11 @@ class LearningAgent:
 
                 # swap two tables
                 if (np.random.uniform() > 0.5):
-                    state_dict_temp = self.q_network.state_dict()
-                    self.q_network.load_state_dict(self.target_network.state_dict())
-                    self.target_network.load_state_dict(state_dict_temp)
+                    temp_ref = self.q_network
+                    self.q_network = self.target_network
+                    self.target_network = temp_ref
+                    # self.q_network.load_state_dict(self.target_network.state_dict())
+                    # self.target_network.load_state_dict(state_dict_temp)
 
         else:
             # Implement replay buffer (reminder: cannot implement replay buffer for SARSA!)
@@ -429,12 +433,15 @@ class LearningAgent:
                     next_a = self.choose_next_action_average_of_two(next_s)
                     self.next_actions[node_id] = next_a
                     target = reward + self.gamma * self.expected_action_value(next_s)
+
+                    if (node_id == 12):
+                        print(next_a)
                 else:
                     next_a = self.choose_next_action_average_of_two(next_s)
                     self.next_actions[node_id] = next_a
                     target = reward + self.gamma * self.target_network(next_s)[self.action_to_index[next_a]]
             else:
-                next_a = self.choose_next_action_epsilon_greedy(next_s, node_id)
+                next_a = self.choose_next_action_epsilon_greedy(next_s, node_id, need_new_value=True)
                 self.next_actions[node_id] = next_a
                 target = reward + self.gamma * self.q_network(next_s)[self.action_to_index[next_a]]
         else:
@@ -466,7 +473,7 @@ class Network(torch.nn.Module):
         layers.append(torch.nn.ReLU())
         for i in range(depth-1):
             layers.append(weight_norm(torch.nn.Linear(in_features=100, out_features=100), name='weight'))
-            layers.append(torch.nn.ReLU())
+            layers.append(torch.nn.ReLU(inplace=False))
         layers.append(torch.nn.Linear(in_features=100, out_features=output_dimensions))
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

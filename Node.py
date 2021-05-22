@@ -255,7 +255,7 @@ class Node:
                 current_state = self.current_s()
                 # if isinstance(self.learning_agent, DeepLearningAgent):
                 #         current_state = current_state.to(self.learning_agent.device)
-                action = self.learning_agent.choose_next_action_epsilon_greedy(current_state)
+                action = self.learning_agent.choose_next_action_epsilon_greedy(current_state, self.id)
                 self.take_action(action)
 
             random_wait = np.random.randint(0, Config.MAX_DELAY_BEFORE_SLEEP_MS)

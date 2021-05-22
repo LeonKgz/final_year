@@ -421,6 +421,7 @@ def generate_config(config):
         "Robbins-Monroe": False,
         "epsilon_decay_rate": -1,
         "alpha_decay_rate": -1,
+        "expected_sarsa": False,
     }
 
     for (key, val) in config.items():
@@ -471,20 +472,21 @@ progression = [
             "GLIE": True,
             "epsilon_decay_rate": 1,
         },
-        {
-            "title": "alpha decay",
-            "label": "alpha decay",
-            "Robbins-Monroe": True,
-            "alpha_decay_rate": 1,
-        },
-        {
-            "title": "epsilon + alpha decay",
-            "label": "epsilon + alpha decay",
-            "GLIE": True,
-            "epsilon_decay_rate": 1,
-            "Robbins-Monroe": True,
-            "alpha_decay_rate": 1,
-        }]
+        # {
+        #     "title": "alpha decay",
+        #     "label": "alpha decay",
+        #     "Robbins-Monroe": True,
+        #     "alpha_decay_rate": 1,
+        # },
+        # {
+        #     "title": "epsilon + alpha decay",
+        #     "label": "epsilon + alpha decay",
+        #     "GLIE": True,
+        #     "epsilon_decay_rate": 1,
+        #     "Robbins-Monroe": True,
+        #     "alpha_decay_rate": 1,
+        # }
+    ]
 
 config_global = [
     [
@@ -492,42 +494,47 @@ config_global = [
         "Tabular Q learning convergence with epsilon and alpha decay rates equal to one",
         ### Main Theme
         {
-            "title": "Tabular Q learning",
+            "title": "SARSA",
             "training": True,
+            "deep": True,
+            "sarsa": True,
+            "expected_sarsa": True,
+            "double_deep": True
         },
         ### Progression of hypertuning parameters
         progression
     ],
-    [
-        "SARSA tabular convergence with epsilon and alpha decay rates equal to one",
-        {
-            "title": "Tabular SARSA",
-            "training": True,
-            "sarsa": True,
-        },
-        progression
-    ],
-    [
-        "Deep Q learning convergence with epsilon and alpha decay rates equal to one",
-        {
-            "title": "Deep Q learning",
-            "training": True,
-            "deep": True,
-        },
-        progression
-    ],
-    [
-        "Deep SARSA convergence with epsilon and alpha decay rates equal to one",
-        {
-            "title": "Tabular SARSA",
-            "training": True,
-            "deep": True,
-            "sarsa": True,
-        },
-        progression
-    ],
+    # [
+    #     "SARSA tabular convergence with epsilon and alpha decay rates equal to one",
+    #     {
+    #         "title": "Tabular SARSA",
+    #         "training": True,
+    #         "sarsa": True,
+    #     },
+    #     progression
+    # ],
+    # [
+    #     "Deep Q learning convergence with epsilon and alpha decay rates equal to one",
+    #     {
+    #         "title": "Deep Q learning",
+    #         "training": True,
+    #         "deep": True,
+    #     },
+    #     progression
+    # ],
+    # [
+    #     "Deep SARSA convergence with epsilon and alpha decay rates equal to one",
+    #     {
+    #         "title": "Tabular SARSA",
+    #         "training": True,
+    #         "deep": True,
+    #         "sarsa": True,
+    #     },
+    #     progression
+    # ],
 ]
 
+torch.autograd.set_detect_anomaly(True)
 
 # Still to try buffer with new optimizations
 for i in range(len(config_global)):
@@ -547,12 +554,12 @@ for i in range(len(config_global)):
         configs_result.append(curr_config)
 
     print(f"\n\n\n STARTING SIMULATION: \t\t\t {config_global[i][0]} \n\n\n")
-    try:
-        health_check(configurations=configs_result, days=0.1)
-        compare_before_and_after(configurations=configs_result, save_to_local=True)
-    except Exception:
-        print(f"THERE WAS A PROBLEM RUNNING SIMULATION — {config_global[i][0]}")
-        print(f"THERE WAS A PROBLEM RUNNING SIMULATION — {config_global[i][0]}")
-        print(f"THERE WAS A PROBLEM RUNNING SIMULATION — {config_global[i][0]}")
+    # try:
+        # health_check(configurations=configs_result, days=0.1)
+    compare_before_and_after(configurations=configs_result, save_to_local=True)
+    # except Exception:
+    #     print(f"THERE WAS A PROBLEM RUNNING SIMULATION — {config_global[i][0]}")
+    #     print(f"THERE WAS A PROBLEM RUNNING SIMULATION — {config_global[i][0]}")
+    #     print(f"THERE WAS A PROBLEM RUNNING SIMULATION — {config_global[i][0]}")
 
     print("\n\n\n#################################################################################################\n\n\n")

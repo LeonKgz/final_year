@@ -38,7 +38,7 @@ class NodeState(Enum):
 class Node:
     def __init__(self, node_id, energy_profile: EnergyProfile, lora_parameters, sleep_time, process_time, adr, location,
                  base_station: Gateway, noma: NOMA, env, payload_size, air_interface, training, confirmed_messages, reward_type, state_space,
-                 tradeoff = 0.5):
+                 tradeoff = 0.5, reach=500):
 
         self.num_tx_state_changes = 0
         self.total_wait_time_because_dc = 0
@@ -112,10 +112,23 @@ class Node:
             # "energy_total": {},
             "energy_per_bit": {},
             # "pkgs_in_air": {}
+            # "der": {}
         }
+
+        self.counts = {
+            "Spreading Factor": {},
+            "Transmission Power": {},
+        }
+
+        for sf in LoRaParameters.SPREADING_FACTORS:
+            self.counts["Spreading Factor"][sf] = 0
+
+        for tp in LoRaParameters.TRANSMISSION_POWERS:
+            self.counts["Transmission Power"][tp] = 0
 
         self.actions = []
         self.state_space = state_space
+        self.reach = reach
 
     def plot(self, prop_measurements):
         plt.figure()
@@ -196,7 +209,7 @@ class Node:
                 current_state = self.current_s()
                 # if isinstance(self.learning_agent, DeepLearningAgent):
                 #     current_state = current_state.to(self.learning_agent.device)
-                action = self.learning_agent.choose_next_action_epsilon_greedy(current_state)
+                action = self.learning_agent.choose_next_action_epsilon_greedy(current_state, self.id)
                 self.take_action(action)
 
             random_wait = np.random.randint(0, Config.MAX_DELAY_BEFORE_SLEEP_MS)
@@ -787,21 +800,29 @@ class Node:
         ch = (a[2].item())
 
         if (self.learning_agent.config["slow_tp"]):
-            self.lora_param.change_tp_to(self.attempt(tp, self.lora_param.tp, LoRaParameters.TRANSMISSION_POWERS))
+            tp_result = self.attempt(tp, self.lora_param.tp, LoRaParameters.TRANSMISSION_POWERS)
+            self.lora_param.change_tp_to(tp_result)
         else:
-            self.lora_param.change_tp_to(tp)
+            tp_result = tp
+            self.lora_param.change_tp_to(tp_result)
+        self.counts["Transmission Power"][tp_result] += 1
 
         if (self.learning_agent.config["slow_sf"]):
-            self.lora_param.change_sf_to(self.attempt(sf, self.lora_param.sf, LoRaParameters.SPREADING_FACTORS))
+            sf_result = self.attempt(sf, self.lora_param.sf, LoRaParameters.SPREADING_FACTORS)
+            self.lora_param.change_sf_to(sf_result)
         else:
-            self.lora_param.change_sf_to(sf)
+            sf_result = sf
+            self.lora_param.change_sf_to(sf_result)
+        self.counts["Spreading Factor"][sf_result] += 1
 
         if (self.learning_agent.config["slow_channel"]):
-            self.lora_param.change_channel_to(self.attempt(ch, self.lora_param.freq, LoRaParameters.DEFAULT_CHANNELS))
+            ch_result = self.attempt(ch, self.lora_param.freq, LoRaParameters.DEFAULT_CHANNELS)
+            self.lora_param.change_channel_to(ch_result)
         else:
-            self.lora_param.change_channel_to(ch)
+            ch_result = ch
+            self.lora_param.change_channel_to(ch_result)
 
-        self.actions.append((tp, sf, ch))
+        self.actions.append((tp_result, sf_result, ch_result))
 
     # Current State (RL)
     def current_s(self):
@@ -892,7 +913,13 @@ class Node:
         # self.rl_measurements["energy_value"][self.env.now] = self.energy_value
         # self.rl_measurements["energy_total"][self.env.now] = self.total_energy_consumed()
         self.rl_measurements["energy_per_bit"][self.env.now] = latest_energy
-        # self.rl_measurements["pkgs_in_air"][self.env.now] = len(self.air_interface.packages_in_air)
+
+        # if (self.num_unique_packets_sent == 0 or self.id not in self.base_station.packet_num_received_from):
+        #     der = 0
+        # else:
+        #     der = (self.base_station.packet_num_received_from[self.id] / self.num_unique_packets_sent) * 100
+        #
+        # self.rl_measurements["der"][self.env.now] = der
 
         return reward
 

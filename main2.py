@@ -166,7 +166,9 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
     f_large, axarr_large = None, None
     f_small, axarr_small = None, None
     file_name_large = file_name
-    file_name_small = file_name + "_SMALL"
+    file_name_small = file_name + "_small"
+    file_name_results = file_name + "_histogram"
+    file_name_counts = file_name + "_counts"
 
     # plots all configs in configurations on one large plot, and duplicates most important data onto a smaller plot
     for config_cnt, config in enumerate(configurations):
@@ -207,6 +209,23 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
             f_results, axarr_results = plt.subplots(num_rows_results, num_columns_results,
                                                     figsize=(num_columns_results * 7, num_rows_results * 5),
                                                     sharex=True)
+
+            # setting up plots for histograms of results for DER, EE, etc.
+            # 'settings' is a set of labels, the same for each of the historgrams in 'results'
+            counts = {}
+
+            for key in nodes[0].counts.keys():
+                counts[key] = {}
+
+            # for sf in LoRaParameters.SPREADING_FACTORS:
+            #     counts["Spreading Factors"][sf] = 0
+            # for tp in LoRaParameters.TRANSMISSION_POWERS:
+            #     counts["Transmission Power"][tp] = 0
+
+            num_rows_counts = 1
+            num_columns_counts = len(counts.keys())
+            f_counts, axarr_counts = plt.subplots(num_rows_counts, num_columns_counts,
+                                                    figsize=(num_columns_counts * 7, num_rows_counts * 5))
 
         first_run = False
 
@@ -361,6 +380,31 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
                 temp.append(list(throughputs.values())[-1])
                 total_unique_packets_sent += node.num_unique_packets_sent
 
+                # Recording counts for specified parameters (in Node class)
+                for parameter in counts.keys():
+                    for val, cnt in node.counts[parameter].items():
+                        if (val not in counts[parameter]):
+                            counts[parameter][val] = 0
+                        counts[parameter][val] += cnt
+
+            # plotting counts values
+            for parameter_counter, parameter in enumerate(counts):
+                count_dict = counts[parameter]
+
+                x_axis = [i for i in range(len(count_dict))]
+                x_axis_labels = [std_val for std_val in count_dict.keys()]
+                y_axis = [cnt_val for cnt_val in count_dict.values()]
+
+                # for num, std_parameter_value in enumerate(count_dict):
+                #     y_axis.append(count_dict[std_parameter_value])
+                # cant think of the index for the current plot, the index is the index of the parameter
+                axarr_counts[parameter_counter].plot(x_axis, y_axis, label=config["label"], marker='o')
+                axarr_counts[parameter_counter].xaxis.set_ticks(x_axis)
+                axarr_counts[parameter_counter].xaxis.set_ticklabels(x_axis_labels)
+                axarr_counts[parameter_counter].set_xlabel(parameter)
+                axarr_counts[parameter_counter].set_ylabel(parameter + " Counts")
+                axarr_counts[parameter_counter].legend()
+
             # further division by a thousand is required for converting from mJ to J
             energy_avg = (energy_avg / config["num_nodes"]) / 1000
             num_packets_avg = total_unique_packets_sent / config["num_nodes"]
@@ -424,6 +468,10 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
 
+        save_dir = save_dir + f"{file_name_large}/"
+        if not os.path.exists(save_dir):
+            os.mkdir(save_dir)
+
         name = save_dir + file_name_large + ".png"
         f_large.savefig(name)
         print(f"\nSaved plot {name}")
@@ -432,6 +480,15 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
         f_small.savefig(name)
         print(f"Saved plot {name}")
 
+        name = save_dir + file_name_results + ".png"
+        f_results.savefig(name)
+        print(f"Saved plot {name}")
+
+        name = save_dir + file_name_counts + ".png"
+        f_counts.savefig(name)
+        print(f"Saved plot {name}")
+
+
         name = save_dir + file_name_large + ".txt"
         with open(name, 'w') as f:
 
@@ -439,7 +496,7 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
                 ret = "{"
                 for key, val in dict.items():
                     tabs = "\t" + (depth * "\t")
-                    val_str = val if isinstance(val, bool) else "\"val\""
+                    val_str = val if isinstance(val, bool) else f"\"{val}\"" if isinstance(val, str) else f"{val}"
                     ret += f"\n{tabs}\"{key}\": {val_str},"
                 tabs = (depth * "\t")
                 return ret + f"\n{tabs}" + "}"
@@ -492,7 +549,7 @@ def generate_config(config):
         "save": False,
         "num_nodes": num_nodes,
         "reward": normal_reward,
-        "days": 3,
+        "days": 10,
         "locations": locations,
         "state_space": ["tp", "sf", "channel"],
         "sector_size": 100,
@@ -600,6 +657,7 @@ config_global = [
             "Robbins-Monroe": True,
             "alpha_decay_rate": 1,
             "GLIE": True,
+            "days": 3
         },
         progression
     ],

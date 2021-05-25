@@ -1,10 +1,8 @@
 import datetime
-
 import matplotlib.pyplot as plt
 import numpy as np
 import simpy
 import torch
-import time
 import os
 
 import PropagationModel
@@ -16,12 +14,10 @@ from LoRaParameters import LoRaParameters
 from Location import Location
 from NOMA import NOMA
 from Node import Node
-from RL_plots import RL_plots
 from SINRModel import SINRModel
 from SNRModel import SNRModel
 from agent import LearningAgent
 from clustering_nodes import cluster_nodes, search_closest
-
 
 def plot_time(_env, sim_time):
     while True:
@@ -185,7 +181,7 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
         # Initializing all subplots and figures
         if first_run:
             num_columns_large = len(configurations) + 1
-            num_rows_large = num_categories * 2 + 3
+            num_rows_large = num_categories * 2 + 2
             # adding 3 additional plots for simulation info at the top, loss and results at the bottom
             f_large, axarr_large = plt.subplots(num_rows_large, num_columns_large, figsize=(num_columns_large * 7, num_rows_large * 5),
                                     sharex='col', sharey='row')
@@ -195,6 +191,22 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
             # adding 3 additional plots for simulation info at the top, loss and results at the bottom
             f_small, axarr_small = plt.subplots(num_rows_small, num_columns_small, figsize=(num_columns_small * 7, num_rows_small * 5),
                                                 sharex=True)
+
+            # setting up plots for histograms of results for DER, EE, etc.
+            # 'settings' is a set of labels, the same for each of the historgrams in 'results'
+            settings = []
+            results = {
+                "DER": [],
+                "Energy Efficiency": [],
+                "Throughput": []
+            }
+
+            num_columns_results = len(results.keys())
+            num_rows_results = 1
+            # adding 3 additional plots for simulation info at the top, loss and results at the bottom
+            f_results, axarr_results = plt.subplots(num_rows_results, num_columns_results,
+                                                    figsize=(num_columns_results * 7, num_rows_results * 5),
+                                                    sharex=True)
 
         first_run = False
 
@@ -209,9 +221,6 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
             length_per_parameter[parameter] = 0
             # sum_per_parameter[parameter] = {}
             avg_per_parameter[parameter] = {}
-
-        energy_avg = 0
-        num_packets_avg = 0
 
         def simulation_info():
             # Display information about current configuration (at the top of all the plots)
@@ -242,11 +251,8 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
                 axarr_large[0][config_cnt].text(0.1, 0.9, simulation_results, fontsize=20, bbox=props, verticalalignment='top', transform=axarr_large[0][config_cnt].transAxes)
         simulation_info()
 
-        # First simply plotting all the nodes at the same time, while also recording data for averaging later
+        # TODO First simply plotting all the nodes at the same time, while also recording data for averaging later
         for node in nodes:
-
-            energy_avg += node.total_energy_consumed()
-            num_packets_avg += node.num_unique_packets_sent
 
             for parameter_cnt, parameter in enumerate(list(node.rl_measurements.keys())):
                 data_dict = node.rl_measurements[parameter]
@@ -265,10 +271,8 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
 
                 length_per_parameter[parameter] += len(time)
 
-        energy_avg = (energy_avg / config["num_nodes"]) / 1000
-        num_packets_avg = num_packets_avg / config["num_nodes"]
 
-        # Now plotting the mean values for above
+        # TODO Now plotting the mean values for above
         for parameter_cnt, parameter in enumerate(list(nodes[0].rl_measurements.keys())):
             length_per_parameter[parameter] = int(length_per_parameter[parameter] / len(nodes))
             times_per_parameter[parameter] = [i for i in range(0, simulation_time, int(simulation_time / length_per_parameter[parameter]))]
@@ -320,59 +324,87 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
                 # Plotting all mean plots together in the small plot
 
                 axarr_small[parameter_cnt].plot(list(avg_per_parameter[parameter].keys()),
-                                        list(avg_per_parameter[parameter].values()), label=config["label"])
+                                     list(avg_per_parameter[parameter].values()), label=config["label"])
                 axarr_small[parameter_cnt].set_xlabel("Time")
                 axarr_small[parameter_cnt].set_ylabel(f"{parameter} - mean per node")
-                axarr_small[parameter_cnt].set_title("")
+                axarr_small[parameter_cnt].set_title(config["title"])
                 axarr_small[parameter_cnt].legend()
 
-        # Plotting losses for deep learning agents
+        # TODO Plotting losses for deep learning agents
         agent_id = 0
         for agent in agents:
             losses = agent.losses
 
             if (len(configurations) == 1):
-                axarr_large[-2].plot(list(losses.keys()), list(losses.values()), label=agent_id)
+                axarr_large[-1].plot(list(losses.keys()), list(losses.values()), label=agent_id)
                 agent_id += 1
-                axarr_large[-2].set_xlabel("Time")
-                axarr_large[-2].set_ylabel("Loss per Agent")
-                axarr_large[-2].set_title(config["title"])
+                axarr_large[-1].set_xlabel("Time")
+                axarr_large[-1].set_ylabel("Loss per Agent")
+                axarr_large[-1].set_title(config["title"])
             else:
-                axarr_large[-2][config_cnt].plot(list(losses.keys()), list(losses.values()), label=agent_id)
+                axarr_large[-1][config_cnt].plot(list(losses.keys()), list(losses.values()), label=agent_id)
                 agent_id += 1
-                axarr_large[-2][config_cnt].set_xlabel("Time")
-                axarr_large[-2][config_cnt].set_ylabel("Loss per Agent")
-                axarr_large[-2][config_cnt].set_title(config["title"])
+                axarr_large[-1][config_cnt].set_xlabel("Time")
+                axarr_large[-1][config_cnt].set_ylabel("Loss per Agent")
+                axarr_large[-1][config_cnt].set_title(config["title"])
 
+        # record information for current simulation run for the final histograms
         def simulation_results():
 
             temp = []
+            total_unique_packets_sent = 0
+            energy_avg = 0
+
             for node in nodes:
+                energy_avg += node.total_energy_consumed()
                 throughputs = node.rl_measurements["throughputs"]
                 temp.append(list(throughputs.values())[-1])
-                # mean_adr_conf = np.mean(list(rewards.values()))
+                total_unique_packets_sent += node.num_unique_packets_sent
+
+            # further division by a thousand is required for converting from mJ to J
+            energy_avg = (energy_avg / config["num_nodes"]) / 1000
+            num_packets_avg = total_unique_packets_sent / config["num_nodes"]
+
+            total_unique_packets_received = nodes[0].base_station.distinct_packets_received
             mean_throughput = np.mean(temp)
+            energy_efficiency = num_packets_avg / energy_avg
+            der = (total_unique_packets_received / total_unique_packets_sent) * 100
 
-            # print(f"\n Mean throughput (at the end of the simulation) for " + str(config["title"]) + " is " + str(mean))
-            # print(f"\n Energy Efficiency (Packets/Joule) = {}")
+            def print_values_obsolete():
+                # print(f"\n Mean throughput (at the end of the simulation) for " + str(config["title"]) + " is " + str(mean))
+                # print(f"\n Energy Efficiency (Packets/Joule) = {}")
 
-            # Display information about simulation results (at the bottom)
-            props = dict(alpha=0.6)
+                # Display information about simulation results (at the bottom)
+                props = dict(alpha=0.6)
+                simulation_results = "Throughput — {:.2f}\n" \
+                                  "EE (Packets/Joule) — {:.2f}\n" \
+                    .format(
+                    mean_throughput,
+                    num_packets_avg / energy_avg,
+                )
 
-            simulation_results = "Throughput — {:.2f}\n" \
-                              "EE (Packets/Joule) — {:.2f}\n" \
-                .format(
-                mean_throughput,
-                num_packets_avg / energy_avg,
-            )
+                if (len(configurations) == 1):
+                    axarr_large[-1].text(0.1, 0.9, simulation_results, fontsize=20, bbox=props, verticalalignment='top',
+                                         transform=axarr_large[-1].transAxes)
+                else:
+                    axarr_large[-1][config_cnt].text(0.1, 0.9, simulation_results, fontsize=20, bbox=props,
+                                                     verticalalignment='top',
+                                                     transform=axarr_large[-1][config_cnt].transAxes)
 
-            if (len(configurations) == 1):
-                axarr_large[-1].text(0.1, 0.9, simulation_results, fontsize=20, bbox=props, verticalalignment='top',
-                              transform=axarr_large[-1].transAxes)
-            else:
-                axarr_large[-1][config_cnt].text(0.1, 0.9, simulation_results, fontsize=20, bbox=props, verticalalignment='top',
-                                          transform=axarr_large[-1][config_cnt].transAxes)
+            settings.append(config["label"])
+            results["DER"].append(der)
+            results["Energy Efficiency"].append(energy_efficiency)
+            results["Throughput"].append(mean_throughput)
+
         simulation_results()
+
+    # plot for histograms at the end
+    def plot_results():
+        for cnt, val in enumerate(results):
+            # axarr_results[0][cnt].ylabel("Energy Efficiency (Packets/Joule)")
+            axarr_results[cnt].bar(settings, results[val], width=0.4)
+            axarr_results[cnt].set_ylabel(val)
+    plot_results()
 
     def save_figures():
 
@@ -407,7 +439,8 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
                 ret = "{"
                 for key, val in dict.items():
                     tabs = "\t" + (depth * "\t")
-                    ret += f"\n{tabs}{key}: {val};"
+                    val_str = val if isinstance(val, bool) else "\"val\""
+                    ret += f"\n{tabs}\"{key}\": {val_str},"
                 tabs = (depth * "\t")
                 return ret + f"\n{tabs}" + "}"
 
@@ -425,8 +458,8 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
             f.write(input)
             f.close()
             print(f"Saved file {name}\n")
-    save_figures()
 
+    save_figures()
     plt.show()
 
 # Standard configuration values
@@ -452,7 +485,9 @@ def generate_config(config):
         "sarsa": False,
         "mc": False,
         "replay_buffer": False,
+        "replay_buffer_scale": 1,
         "double_deep": False,
+        "target_update_rate": 1,
         "load": False,
         "save": False,
         "num_nodes": num_nodes,
@@ -511,74 +546,60 @@ adr_conf_config = generate_config({
 # ]
 
 # Hypertuning progression
+
 progression = [
     {
         "title": "",
-        "label": "default",
+        "label": "[tp]",
+        "state_space": ["tp"],
     },
     {
-        "title": "epsilon decay",
-        "label": "epsilon decay",
-        "GLIE": True,
-        "epsilon_decay_rate": 1,
+        "title": "",
+        "label": "[sf]",
+        "state_space": ["sf"],
     },
-    {
-        "title": "alpha decay",
-        "label": "alpha decay",
-        "Robbins-Monroe": True,
-        "alpha_decay_rate": 1,
-    },
-    {
-        "title": "epsilon + alpha decay",
-        "label": "epsilon + alpha decay",
-        "GLIE": True,
-        "epsilon_decay_rate": 1,
-        "Robbins-Monroe": True,
-        "alpha_decay_rate": 1,
-    }]
+    # {
+    #     "title": "",
+    #     "label": "[channel]",
+    #     "state_space": ["channel"],
+    # },
+    # {
+    #     "title": "",
+    #     "label": "[sinr]",
+    #     "state_space": ["sinr"],
+    # },
+    # {
+    #     "title": "",
+    #     "label": "[energy]",
+    #     "state_space": ["energy"],
+    # },
+    # {
+    #     "title": "",
+    #     "label": "[rss]",
+    #     "state_space": ["rss"],
+    # },
+    # {
+    #     "title": "",
+    #     "label": "[packet_id]",
+    #     "state_space": ["packet_id"],
+    # },
+    # {
+    #     "title": "",
+    #     "label": "[num_pkt]",
+    #     "state_space": ["num_pkt"],
+    # },
+]
 
 config_global = [
     [
-        "deep_sarsa_decay",
+        "epsilon_deep_q",
         {
-            "title": "Deep SARSA",
+            "title": "Deep Q learning",
             "training": True,
-            "sarsa": True,
-            "deep": True
-        },
-        progression
-    ],
-    [
-        "deep_expected_sarsa_decay",
-        {
-            "title": "Deep Expected SARSA",
-            "training": True,
-            "sarsa": True,
-            "expected_sarsa": True,
-            "deep": True
-        },
-        progression
-    ],
-    [
-        "double_deep_sarsa_decay",
-        {
-            "title": "Double Deep SARSA",
-            "training": True,
-            "sarsa": True,
-            "double_deep": True,
-            "deep": True
-        },
-        progression
-    ],
-    [
-        "double_deep_expected_sarsa_decay",
-        {
-            "title": "Double Deep Expected SARSA",
-            "training": True,
-            "sarsa": True,
-            "expected_sarsa": True,
-            "double_deep": True,
-            "deep": True
+            "deep": True,
+            "Robbins-Monroe": True,
+            "alpha_decay_rate": 1,
+            "GLIE": True,
         },
         progression
     ],
@@ -608,20 +629,24 @@ for i in range(len(config_global)):
         configs_combination_per_simulation.append(temp)
 
     print(f"\n\n\n STARTING SIMULATION: \t\t\t {simulation_name} \n\n\n")
-    try:
-        health_check(configurations=configs_combination_per_simulation, days=0.1)
-        run_configurations(configurations=configs_combination_per_simulation,
-                           save_to_local=True,
-                           file_name=config_global[i][0],
-                           main_theme=main_theme,
-                           progression=progression,
-                           rest=configs_combination_per_simulation[0],
-                           )
-    except Exception as e:
-        print(f"THERE WAS A PROBLEM RUNNING SIMULATION — {config_global[i][0]}")
-        print(f"THERE WAS A PROBLEM RUNNING SIMULATION — {config_global[i][0]}")
-        print(f"THERE WAS A PROBLEM RUNNING SIMULATION — {config_global[i][0]}")
-        print(e)
+    # try:
+    health_check(configurations=configs_combination_per_simulation, days=0.1)
+    run_configurations(configurations=configs_combination_per_simulation,
+                       save_to_local=True,
+                       file_name=config_global[i][0],
+                       main_theme=main_theme,
+                       progression=progression,
+                       rest=configs_combination_per_simulation[0],
+                       )
+    # except Exception as e:
+    #     print(f"THERE WAS A PROBLEM RUNNING SIMULATION — {config_global[i][0]}")
+    #     print(f"THERE WAS A PROBLEM RUNNING SIMULATION — {config_global[i][0]}")
+    #     print(f"THERE WAS A PROBLEM RUNNING SIMULATION — {config_global[i][0]}")
+    #     print(e)
 
     print(
         "\n\n\n#################################################################################################\n\n\n")
+
+
+
+

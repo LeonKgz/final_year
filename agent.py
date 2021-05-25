@@ -89,10 +89,11 @@ class LearningAgent:
 
             self.optimiser = torch.optim.Adam(self.q_network.parameters(), lr=self.alpha)
 
-            self.buffer = ReplayBuffer(50)
-            self.batch_size = 10
-            self.target_update_counter= 0
-            self.target_update_rate = 10
+            self.batch_size = -1
+            self.buffer = ReplayBuffer()
+            self.target_update_counter = 0
+            self.target_update_rate = -1
+            self.replay_buffer_size =-1
 
     def assign_nodes(self, nodes):
         num_nodes = len(nodes)
@@ -110,6 +111,22 @@ class LearningAgent:
 
         self.epsilon_update_rate = num_nodes * self.config["epsilon_decay_rate"]
         self.alpha_update_rate = num_nodes * self.config["alpha_decay_rate"]
+
+        self.epsilon_update_rate = int(num_nodes * self.config["epsilon_decay_rate"])
+        self.alpha_update_rate = int(num_nodes * self.config["alpha_decay_rate"])
+
+        self.batch_size = int(num_nodes * self.config["replay_buffer_scale"])
+        self.target_update_rate = int(num_nodes * self.config["target_update_rate"])
+
+        if (num_nodes == 1):
+            self.epsilon_update_rate = 1
+            self.alpha_update_rate = 1
+            self.target_update_rate = 1
+            self.batch_size = 1
+
+        if (self.config["deep"]):
+            self.replay_buffer_size = 3 * self.batch_size
+            self.buffer.set_size(self.replay_buffer_size)
 
     def convert_state_to_index(self, state):
         tp_S, sf_S, channel_S = state
@@ -345,7 +362,13 @@ class LearningAgent:
         s, a, reward, next_s = transition
 
         if self.sarsa:
-            next_a = self.choose_next_action_epsilon_greedy(next_s, node_id=node_id)
+            # This is is a bug that performed as well as deep models
+            # TODO: figure out WHY not taking actions performs so well
+            # next_a = self.choose_next_action_epsilon_greedy(next_s, node_id=node_id)
+            # next_a_index = self.action_to_index[next_a]
+
+            next_a = self.choose_next_action_epsilon_greedy(next_s, node_id=node_id, need_new_value=True)
+            self.next_actions[node_id] = next_a
             next_a_index = self.action_to_index[next_a]
 
         s_index = self.convert_state_to_index(s)
@@ -499,8 +522,8 @@ class Network(torch.nn.Module):
 
 class ReplayBuffer():
 
-    def __init__(self, size, alpha=0.5):
-        self.size = size
+    def __init__(self, alpha=0.5):
+        self.size = 1
         self.buffer = []
         self.weights = []
         self.curr_pointer = 0
@@ -544,6 +567,9 @@ class ReplayBuffer():
 
     def sizeof(self):
         return len(self.buffer)
+
+    def set_size(self, replay_buffer_size):
+       self.size = replay_buffer_size
 
 # Old versions of methods
 

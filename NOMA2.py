@@ -1,9 +1,5 @@
-# import AirInterface2
-from Gateway import Gateway
-import AirInterface
-
-class NOMA:
-    def __init__(self, gateway: Gateway, air_interface: AirInterface, env):
+class NOMA2:
+    def __init__(self, gateway, air_interface, env):
         self.gateway = gateway
         self.air_interface = air_interface
         self.env = env

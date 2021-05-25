@@ -16,6 +16,9 @@ class Location:
                 raise ValueError('Define min and max or give x and y coordinates')
         self.indoor = indoor
 
+    def get_tuple(self):
+        return (self.x, self.y)
+
     @staticmethod
     def distance(loc_1, loc_2):
         delta_x = loc_1.x - loc_2.x

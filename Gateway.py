@@ -69,9 +69,11 @@ class Gateway:
         In addition, the gateway determines the best suitable DL Rx window.
         """
 
+        if (from_node.id not in self.packet_num_received_from):
+            self.packet_num_received_from[from_node.id] = 0
+
         if from_node.id not in self.packet_history:
             self.packet_history[from_node.id] = deque(maxlen=20)
-            self.packet_num_received_from[from_node.id] = 0
             self.distinct_bytes_received_from[from_node.id] = 0
 
         if packet.rss < self.SENSITIVITY[packet.lora_param.sf] or packet.snr < required_snr(packet.lora_param.dr):
@@ -89,6 +91,7 @@ class Gateway:
         elif self.last_distinct_packets_received_from[from_node.id] != packet.id:
             self.distinct_packets_received += 1
             self.distinct_bytes_received_from[from_node.id] += packet.payload_size
+            self.packet_num_received_from[from_node.id] += 1
         self.last_distinct_packets_received_from[from_node.id] = packet.id
 
         self.packet_history[from_node.id].append(packet.snr)
@@ -164,9 +167,11 @@ class Gateway:
         In addition, the gateway determines the best suitable DL Rx window.
         """
 
+        if (from_node.id not in self.packet_num_received_from):
+            self.packet_num_received_from[from_node.id] = 0
+
         if from_node.id not in self.packet_history:
             self.packet_history[from_node.id] = deque(maxlen=20)
-            self.packet_num_received_from[from_node.id] = 0
             self.distinct_bytes_received_from[from_node.id] = 0
 
         if packet.rss < self.SENSITIVITY[packet.lora_param.sf] or packet.snr < required_snr(packet.lora_param.dr):
@@ -184,6 +189,7 @@ class Gateway:
         elif self.last_distinct_packets_received_from[from_node.id] != packet.id:
             self.distinct_packets_received += 1
             self.distinct_bytes_received_from[from_node.id] += packet.payload_size
+            self.packet_num_received_from[from_node.id] += 1
         self.last_distinct_packets_received_from[from_node.id] = packet.id
 
         self.packet_history[from_node.id].append(packet.snr)

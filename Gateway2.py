@@ -33,10 +33,9 @@ class Gateway2:
     SENSITIVITY = {6: -121, 7: -126.5, 8: -129, 9: -131.5, 10: -134, 11: -136.5, 12: -139.5}
 
 
-    def __init__(self, env, location, air_interface, fast_adr_on=False, max_snr_adr=True, min_snr_adr=False, avg_snr_adr=False, adr_margin_db=10):
+    def __init__(self, env, location, air_interface, lns, config, fast_adr_on=False, max_snr_adr=True, min_snr_adr=False, avg_snr_adr=False, adr_margin_db=10):
         self.bytes_received = 0
         self.location = location
-        self.air_interface = air_interface
         self.packet_history = dict()
         self.packet_num_received_from = dict()
         self.distinct_packets_received = 0
@@ -59,10 +58,27 @@ class Gateway2:
 
         self.prop_measurements = {}
 
-        self.noma = NOMA2(gateway=self, air_interface=air_interface, env=env)
+        self.air_interface = air_interface
+        self.lns = lns
+        self.noma = NOMA2(gateway=self, air_interface=air_interface, env=env, config=config)
+        self.packet_id_to_packet = {}
+
+        self.config = config
+
+    def submit_packet_for_consideration(self, packet: UplinkMessage):
+
+        if (self.config["toy_log"]):
+            print(f"TOY_NOMA: ################ GATEWAY: for consideration received packet {packet.node.id}-{packet.id} from NOMA")
+        # self.packet_id_to_packet[packet.id] = packet
+        yield self.env.process(self.lns.submit(packet, self))
+
+        # yield self.env.process(self.packet_received_noma(packet.node, packet, self.env.now))
+        # self.lns.submit(packet, self)
 
     def packet_received_noma(self, from_node, packet: UplinkMessage, now):
 
+        if (self.config["toy_log"]):
+            print(f"TOY_NOMA: ################ GATEWAY: finally received packet {packet.node.id}-{packet.id} from LNS")
         downlink_meta_msg = DownlinkMetaMessage()
         downlink_msg = DownlinkMessage(dmm=downlink_meta_msg)
 
@@ -73,26 +89,36 @@ class Gateway2:
         In addition, the gateway determines the best suitable DL Rx window.
         """
 
+        if (from_node.id not in self.packet_num_received_from):
+            self.packet_num_received_from[from_node.id] = 0
+
         if from_node.id not in self.packet_history:
             self.packet_history[from_node.id] = deque(maxlen=20)
-            self.packet_num_received_from[from_node.id] = 0
             self.distinct_bytes_received_from[from_node.id] = 0
 
         if packet.rss < self.SENSITIVITY[packet.lora_param.sf] or packet.snr < required_snr(packet.lora_param.dr):
             # the packet received is too weak
             downlink_meta_msg.weak_packet = True
             self.uplink_packet_weak.append(packet)
-            from_node.noma_downlink(packet, downlink_msg)
+
+            if (self.config["toy_log"]):
+                print(f"TOY_NOMA: ################ GATEWAY: received packet {packet.node.id}-{packet.id} is too weak, sending it to the node")
+            from_node.noma_downlink(packet, downlink_msg, self)
 
         self.bytes_received += packet.payload_size
         self.num_of_packet_received += 1
 
         # everytime a distinct message is received (i.e. id is diff from previous message
         if from_node.id not in self.last_distinct_packets_received_from:
+            if (self.config["toy_logg"]):
+                print(f"                                          GATEWAY {self} packets received  incremented due to {packet.id}")
             self.distinct_packets_received += 1
         elif self.last_distinct_packets_received_from[from_node.id] != packet.id:
+            if (self.config["toy_logg"]):
+                print(f"                                          GATEWAY {self} packets received  incremented due to {packet.id}")
             self.distinct_packets_received += 1
             self.distinct_bytes_received_from[from_node.id] += packet.payload_size
+            self.packet_num_received_from[from_node.id] += 1
         self.last_distinct_packets_received_from[from_node.id] = packet.id
 
         self.packet_history[from_node.id].append(packet.snr)
@@ -100,6 +126,7 @@ class Gateway2:
         if from_node.adr:
             downlink_msg.adr_param = self.adr(packet)
 
+        now = self.env.now
         # first compute if DC can be done for RX1 and RX2
         possible_rx1, time_on_air_rx1, off_time_till_rx1 = self.check_duty_cycle(12, packet.lora_param.sf,
                                                                                  packet.lora_param.freq,
@@ -152,7 +179,9 @@ class Gateway2:
         else:
             downlink_meta_msg.dc_limit_reached = True
 
-        yield self.env.process(from_node.noma_downlink(packet, downlink_msg))
+        if (self.config["toy_log"]):
+            print(f"TOY_NOMA: ################ GATEWAY: sending packet {packet.node.id}-{packet.id} to its node")
+        yield self.env.process(from_node.noma_downlink(packet, downlink_msg, self))
         # yield self.env.timeout(1)
 
     def packet_received(self, from_node, packet: UplinkMessage, now):

@@ -1,19 +1,19 @@
 import random
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
 
 import Global
 import PropagationModel
 from Location import Location
 from Gateway import Gateway
 from LoRaPacket import UplinkMessage
-import matplotlib.pyplot as plt
-import pandas as pd
-import numpy as np
-
 from SNRModel import SNRModel
 from SINRModel import SINRModel
 
 class AirInterface:
-    def __init__(self, gateway: Gateway, prop_model: PropagationModel, snr_model: SNRModel, sinr_model: SINRModel, env):
+
+    def __init__(self, gateway: Gateway, prop_model: PropagationModel, snr_model: SNRModel, sinr_model: SINRModel, env, config):
 
         self.prop_measurements = {}
         self.num_of_packets_collided = 0
@@ -26,6 +26,8 @@ class AirInterface:
         self.snr_model = snr_model
         self.sinr_model = sinr_model
         self.env = env
+
+        self.config = config
 
     @staticmethod
     def frequency_collision(p1: UplinkMessage, p2: UplinkMessage):
@@ -228,6 +230,8 @@ class AirInterface:
         self.prop_measurements[node_id]['time_for_pkgs'].append(self.env.now)
 
         self.packages_in_air.append(packet)
+        # print("UPDATE ON PACKET" + str(packet))
+        # print("\nPACKETS IN AIR - " + str(self.packages_in_air) + "\n")
 
     def packet_received(self, packet: UplinkMessage) -> bool:
         """Packet has fully received by the gateway
@@ -240,11 +244,18 @@ class AirInterface:
             self.num_of_packets_collided += 1
             # print('Our packet has collided')
         self.packages_in_air.remove(packet)
+        # print("UPDATE ON PACKET" + str(packet))
+        # print("\nPACKETS IN AIR - " + str(self.packages_in_air) + "\n")
         self.prop_measurements[packet.node.id]['pkgs_in_air'].append(len(self.packages_in_air))
         self.prop_measurements[packet.node.id]['time_for_pkgs'].append(self.env.now)
 
         if (packet.noma and not collided):
+            if (self.config["toy_log"]):
+                print(f"TOY_NOMA: ################ AIR INTERFACE calling self.noma_insert({packet.id})")
             self.noma_insert(packet)
+
+        if (collided and self.config["toy_log"]):
+            print(f"TOY_NOMA: ################ AIR INTERFACE: packet {packet.id}) has COLLIDED")
 
         return collided
 
@@ -260,7 +271,8 @@ class AirInterface:
                     self.packages_in_air_to_noma.insert(index, p_new)
                     break
 
-
+        if (self.config["toy_log"]):
+            print(f"TOY_NOMA: ################ AIR INTERFACE: state of self.packages_in_air_to_noma is — {[p.id for p in self.packages_in_air_to_noma]}")
 
     def plot_packets_in_air(self):
         plt.figure()

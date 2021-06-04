@@ -81,10 +81,10 @@ class LearningAgent:
             # Initialize Q-network and Target network.
             # self.q_network = Network(input_dimensions=len(config["state_space"]), output_dimensions=self.action_size, depth=depth)
             self.q_network = Network(input_dimensions=len(config["state_space"]), output_dimensions=self.action_size,
-                                     depth=self.depth).to(config["device"])
+                                     depth=self.depth, width=self.config["width"]).to(config["device"])
             # self.target_network = Network(input_dimensions=len(config["state_space"]), output_dimensions=self.action_size, depth=depth)
             self.target_network = Network(input_dimensions=len(config["state_space"]),
-                                          output_dimensions=self.action_size, depth=self.depth).to(config["device"])
+                                          output_dimensions=self.action_size, depth=self.depth, width=self.config["width"]).to(config["device"])
             self.target_network.load_state_dict(self.q_network.state_dict())
 
             self.optimiser = torch.optim.Adam(self.q_network.parameters(), lr=self.alpha)
@@ -470,6 +470,10 @@ class LearningAgent:
                     next_a = self.choose_next_action_average_of_two(next_s)
                     self.next_actions[node_id] = next_a
                     target = reward + self.gamma * self.target_network(next_s)[self.action_to_index[next_a]]
+            if self.config["expected_sarsa"]:
+                next_a = self.choose_next_action_epsilon_greedy(next_s, node_id, need_new_value=True)
+                self.next_actions[node_id] = next_a
+                target = reward + self.gamma * self.expected_action_value(next_s)
             else:
                 next_a = self.choose_next_action_epsilon_greedy(next_s, node_id, need_new_value=True)
                 self.next_actions[node_id] = next_a
@@ -494,17 +498,17 @@ class LearningAgent:
 
 class Network(torch.nn.Module):
 
-    def __init__(self, input_dimensions, output_dimensions, depth):
+    def __init__(self, input_dimensions, output_dimensions, depth, width):
         super(Network, self).__init__()
 
         layers = []
 
-        layers.append(torch.nn.Linear(in_features=input_dimensions, out_features=100))
+        layers.append(torch.nn.Linear(in_features=input_dimensions, out_features=width))
         layers.append(torch.nn.ReLU())
         for i in range(depth-1):
-            layers.append(weight_norm(torch.nn.Linear(in_features=100, out_features=100), name='weight'))
+            layers.append(weight_norm(torch.nn.Linear(in_features=width, out_features=width), name='weight'))
             layers.append(torch.nn.ReLU(inplace=False))
-        layers.append(torch.nn.Linear(in_features=100, out_features=output_dimensions))
+        layers.append(torch.nn.Linear(in_features=width, out_features=output_dimensions))
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.network = torch.nn.Sequential(*layers)

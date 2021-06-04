@@ -38,7 +38,7 @@ class NodeState(Enum):
 class Node:
     def __init__(self, node_id, energy_profile: EnergyProfile, lora_parameters, sleep_time, process_time, adr, location,
                  base_station: Gateway, noma: NOMA, env, payload_size, air_interface, training, confirmed_messages, reward_type, state_space,
-                 tradeoff = 0.5, reach=500):
+                 config, tradeoff = 0.5, reach=500):
 
         self.num_tx_state_changes = 0
         self.total_wait_time_because_dc = 0
@@ -108,16 +108,24 @@ class Node:
         self.rl_measurements = {
             "rewards": {},
             "throughputs": {},
-            # "energy_value": {},
-            # "energy_total": {},
             "energy_per_bit": {},
-            # "pkgs_in_air": {}
-            # "der": {}
+            "sinr": {},
+            "rss": {},
+            "pkgs_in_air": {},
+            "E_transmitting": {},
+            "E_receiving": {},
+            "E_sleeping": {},
+            "E_processing": {},
+            "time_on_air": {},
+            "packets_sent": {},
+            "tp": {},
+            "sf": {},
         }
 
         self.counts = {
             "Spreading Factor": {},
             "Transmission Power": {},
+            "Channel": {},
         }
 
         for sf in LoRaParameters.SPREADING_FACTORS:
@@ -126,9 +134,17 @@ class Node:
         for tp in LoRaParameters.TRANSMISSION_POWERS:
             self.counts["Transmission Power"][tp] = 0
 
+        for channel in LoRaParameters.DEFAULT_CHANNELS:
+            self.counts["Channel"][channel] = 0
+
         self.actions = []
         self.state_space = state_space
         self.reach = reach
+
+        self.config = config
+
+        self.adr_started = False
+        self.adr_start_time = -1
 
     def plot(self, prop_measurements):
         plt.figure()
@@ -241,8 +257,8 @@ class Node:
             # if Config.PRINT_ENABLED:
             #     print('{}: DONE sending'.format(self.id))
 
-            reward = self.compute_reward()
-            if (self.training):
+            reward = self.compute_reward(curr_p=packet)
+            if (self.training and not self.config["load"]):
                 next_state = self.current_s()
                 transition = (current_state, action, reward, next_state)
                 self.learning_agent.train_q_network(transition, self.id)
@@ -294,12 +310,14 @@ class Node:
             # if Config.PRINT_ENABLED:
             #     print('{}: DONE sending'.format(self.id))
 
-            reward = self.compute_reward()
-            if (self.training):
+            reward = self.compute_reward(curr_p=packet)
+            if (self.training and not self.config["load"]):
                 next_state = self.current_s()
                 transition = (current_state, action, reward, next_state)
                 self.learning_agent.train_q_network(transition, self.id)
 
+            if (self.config["toy_logg"]):
+                print(f"TOY_NOMA: ################ NODE {self.id} packet {packet.id} is incremented now")
             self.num_unique_packets_sent += 1  # at the end to be sure that this packet was tx
 
     # [----JOIN----]        [rx1]
@@ -377,6 +395,8 @@ class Node:
         #            TX             #
         # fixed energy overhead
         collided = yield self.env.process(self.send_tx(packet))
+        if (self.config["toy_log"] and collided):
+            print(f"TOY_NOMA: ################ NODE {self.id} packet {packet.id} COLLIDED")
         # print('\t Our packet has collided (2)')
 
         #      Received at BS      #
@@ -433,6 +453,9 @@ class Node:
     # This function is called by the gateway, once it finishes processing the respective uplink message
     def noma_downlink(self, packet: UplinkMessage, downlink_message: DownlinkMessage):
         #      Received at BS      #
+
+        if (self.config["toy_log"]):
+            print(f"TOY_NOMA: ################ NODE: received packet {packet.node.id}-{packet.id} from the gateway, now about to process it")
         yield self.env.process(self.send_rx(self.env, packet, downlink_message))
 
         if downlink_message is None:
@@ -455,13 +478,15 @@ class Node:
             if int(self.lora_param.dr) != int(downlink_message.adr_param['dr']):
                 if Config.PRINT_ENABLED:
                     print('\t\t Change DR {} to {}'.format(self.lora_param.dr, downlink_message.adr_param['dr']))
-                self.lora_param.change_dr_to(downlink_message.adr_param['dr'])
+                sf_result = self.lora_param.change_dr_to(downlink_message.adr_param['dr'])
+                self.counts["Spreading Factor"][sf_result] += 1
                 changed = True
             # change tp based on downlink_message['tp']
             if int(self.lora_param.tp) != int(downlink_message.adr_param['tp']):
                 if Config.PRINT_ENABLED:
                     print('\t\t Change TP {} to {}'.format(self.lora_param.tp, downlink_message.adr_param['tp']))
-                self.lora_param.change_tp_to(downlink_message.adr_param['tp'])
+                tp_result = self.lora_param.change_tp_to(downlink_message.adr_param['tp'])
+                self.counts["Transmission Power"][tp_result] += 1
                 changed = True
 
         if changed:
@@ -506,10 +531,16 @@ class Node:
         yield self.env.timeout(LoRaParameters.RADIO_TX_PREP_TIME_MS)
 
         packet.on_air = self.env.now
+
+        if (self.config["toy_log"]):
+            print(f"TOY_NOMA: ################ NODE {self.id} calling air_interface.packet_in_air({packet.node.id}-{packet.id})")
         self.air_interface.packet_in_air(packet)
 
         self.change_state(NodeState.TX)
         yield self.env.timeout(packet.my_time_on_air())
+
+        if (self.config["toy_log"]):
+            print(f"TOY_NOMA: ################ NODE {self.id} calling air_interface.packet_received({packet.node.id}-{packet.id})")
         collided = self.air_interface.packet_received(packet)
         return collided
 
@@ -575,16 +606,17 @@ class Node:
             else:
                 temp_lora_param = deepcopy(packet.lora_param)
 
-                ### PROJECT CODE START
-                curr_val = self.lora_param.dr
-                ### PROJECT CODE END
+                # ### PROJECT CODE START
+                # curr_val = self.lora_param.dr
+                # ### PROJECT CODE END
 
-                temp_lora_param.change_dr_to(3)
+                sf_result = temp_lora_param.change_dr_to(3)
+                self.counts["Spreading Factor"][sf_result] += 1
 
-                ### PROJECT CODE START
-                if (self.lora_param.dr != curr_val):
-                    raise Exception("DR is changed around the learning process (not through take_action() call)")
-                ### PROJECT CODE END
+                # ### PROJECT CODE START
+                # if (self.lora_param.dr != curr_val):
+                #     raise Exception("DR is changed around the learning process (not through take_action() call)")
+                # ### PROJECT CODE END
 
                 rx_time = LoRaPacket.time_on_air(12, temp_lora_param)
                 rx_energy = (rx_time / 1000) * self.energy_profile.rx_power['rx_lna_off_mW']
@@ -619,7 +651,8 @@ class Node:
                 packet.ack_retries_cnt += 1
                 if (packet.ack_retries_cnt % 2) == 1:
                     dr = np.amax([self.lora_param.dr - 1, LoRaParameters.LORAMAC_TX_MIN_DATARATE])
-                    self.lora_param.change_dr_to(dr)
+                    sf_result = self.lora_param.change_dr_to(dr)
+                    self.counts["Spreading Factor"][sf_result] += 1
                     packet.lora_param = self.lora_param
 
                 # set packet as retransmitted packet
@@ -703,6 +736,11 @@ class Node:
             return 0
         return self.total_energy_consumed() / (self.packets_sent * self.payload_size * 8)
 
+    # PROJECT CODE START
+    def get_value_per_bit(self, val):
+        return val / (self.packets_sent * self.payload_size * 8)
+    # PROJECT CODE END
+
     def transmit_related_energy_per_bit(self) -> float:
         return self.transmit_related_energy_consumed() / (self.packets_sent * self.payload_size * 8)
 
@@ -772,7 +810,11 @@ class Node:
         en_list = []
         for node in nodes:
             if node.id in unique_bytes:
-                en_list.append(node.transmit_related_energy_consumed() / unique_bytes[node.id])
+                try:
+                    en_list.append(node.transmit_related_energy_consumed() / unique_bytes[node.id])
+                except ZeroDivisionError:
+                    en_list.append(0)
+
         en_list = np.array(en_list)
         return np.mean(en_list), np.std(en_list)
 
@@ -821,6 +863,7 @@ class Node:
         else:
             ch_result = ch
             self.lora_param.change_channel_to(ch_result)
+        self.counts["Channel"][ch_result] += 1
 
         self.actions.append((tp_result, sf_result, ch_result))
 
@@ -864,10 +907,10 @@ class Node:
 
             if ("rss" in self.state_space):
                 try:
-                    rss = self.air_interface.prop_measurements[self.id]['rss'][-1]
+                    throughput = self.air_interface.prop_measurements[self.id]['rss'][-1]
                 except KeyError:
-                    rss = 0
-                minimal_state.append(rss)
+                    throughput = 0
+                minimal_state.append(throughput)
 
             if ("energy" in self.state_space):
                 energy = self.energy_per_bit()
@@ -881,6 +924,18 @@ class Node:
                 num_pkt = self.num_packets_received
                 minimal_state.append(num_pkt)
 
+            if ("distance" in self.state_space):
+                distance = Location.distance(self.location, self.base_station.location)
+                minimal_state.append(distance)
+
+
+            if ("throughput" in self.state_space):
+                try:
+                    throughput = self.air_interface.prop_measurements[self.id]['throughput'][-1]
+                except KeyError:
+                    throughput = 0
+                minimal_state.append(throughput)
+
             # return torch.Tensor([sf, tp, channel, sinr, energy])
             ret = torch.tensor(minimal_state, dtype=torch.float)
             ret = ret.to(self.learning_agent.device)
@@ -889,7 +944,7 @@ class Node:
 
             # return torch.Tensor([sf, tp, channel, sinr, rss, packet_id, energy, num_pkt])
 
-    def compute_reward(self):
+    def compute_reward(self, curr_p: UplinkMessage):
         # Commented out trade-off between 'network reliability and energy efficiency' version of the reward function
         # latest_sinr = self.air_interface.prop_measurements[self.id]['sinr'][-1]
         # threshold = float(self.sinr_table[self.lora_param.sf])
@@ -898,6 +953,10 @@ class Node:
         # reward = delta * phi + delta * (1 - phi) * latest_throughput / self.energy_value
 
         latest_throughput = self.air_interface.prop_measurements[self.id]['throughput'][-1]
+        latest_sinr = self.air_interface.prop_measurements[self.id]['sinr'][-1]
+        latest_rss = self.air_interface.prop_measurements[self.id]['rss'][-1]
+        latest_snr = self.air_interface.prop_measurements[self.id]['snr'][-1]
+
         latest_energy = self.energy_per_bit()
 
         if (self.reward_type == "energy"):
@@ -910,9 +969,26 @@ class Node:
 
         self.rl_measurements["rewards"][self.env.now] = reward
         self.rl_measurements["throughputs"][self.env.now] = latest_throughput
-        # self.rl_measurements["energy_value"][self.env.now] = self.energy_value
-        # self.rl_measurements["energy_total"][self.env.now] = self.total_energy_consumed()
         self.rl_measurements["energy_per_bit"][self.env.now] = latest_energy
+
+        self.rl_measurements["sinr"][self.env.now] = latest_sinr
+        self.rl_measurements["rss"][self.env.now] = latest_rss
+        self.rl_measurements["pkgs_in_air"][self.env.now] = len(self.air_interface.packages_in_air)
+
+        # self.rl_measurements["E_transmitting"][self.env.now] = self.get_value_per_bit(self.energy_tracking[NodeState(NodeState.TX).name])
+        # self.rl_measurements["E_receiving"][self.env.now] = self.get_value_per_bit(self.energy_tracking[NodeState(NodeState.RX).name])
+        # self.rl_measurements["E_sleeping"][self.env.now] = self.get_value_per_bit(self.energy_tracking[NodeState(NodeState.SLEEP).name])
+        # self.rl_measurements["E_processing"][self.env.now] = self.get_value_per_bit(self.energy_tracking[NodeState(NodeState.PROCESS).name])
+        self.rl_measurements["E_transmitting"][self.env.now] = self.energy_tracking[NodeState(NodeState.TX).name]
+        self.rl_measurements["E_receiving"][self.env.now] = self.energy_tracking[NodeState(NodeState.RX).name]
+        self.rl_measurements["E_sleeping"][self.env.now] = self.energy_tracking[NodeState(NodeState.SLEEP).name]
+        self.rl_measurements["E_processing"][self.env.now] = self.energy_tracking[NodeState(NodeState.PROCESS).name]
+
+        self.rl_measurements["time_on_air"][self.env.now] = curr_p.my_time_on_air()
+        self.rl_measurements["packets_sent"][self.env.now] = self.packets_sent
+
+        self.rl_measurements["tp"][self.env.now] = curr_p.lora_param.tp
+        self.rl_measurements["sf"][self.env.now] = curr_p.lora_param.sf
 
         # if (self.num_unique_packets_sent == 0 or self.id not in self.base_station.packet_num_received_from):
         #     der = 0

@@ -13,6 +13,7 @@ from Gateway import Gateway
 from Global import Config
 from LoRaParameters import LoRaParameters
 from Location import Location
+from NOMA import NOMA
 from Node import Node
 from RL_plots import RL_plots
 from SINRModel import SINRModel
@@ -807,19 +808,6 @@ def paper_1_compare(load=False):
 
 
 
-
-
-
-
-
-
-
-
-def plot_time(_env, sim_time):
-    while True:
-        print('.', end='', flush=True)
-        yield _env.timeout(np.round(sim_time / 10))
-
 def init_nodes(config, agent_to_nodes=None):
     energy_per_bit = 0
     tx_power_mW = {2: 91.8, 5: 95.9, 8: 101.6, 11: 120.8, 14: 146.5}  # measured TX power for each possible TP
@@ -830,6 +818,7 @@ def init_nodes(config, agent_to_nodes=None):
     gateway = Gateway(env, gateway_location)
     nodes = []
     air_interface = AirInterface(gateway, PropagationModel.LogShadow(), SNRModel(), SINRModel(), env)
+    noma = NOMA(gateway=gateway, air_interface=air_interface, env=env)
 
     locations = config["locations"]
     if (agent_to_nodes != None):
@@ -859,7 +848,7 @@ def init_nodes(config, agent_to_nodes=None):
                     adr=config["adr"],
                     confirmed_messages=config["conf"],
                     training=config["training"],
-                    base_station=gateway, env=env, payload_size=payload_size, air_interface=air_interface,
+                    base_station=gateway, noma=noma, env=env, payload_size=payload_size, air_interface=air_interface,
                     reward_type=config["reward"],
                     state_space=config["state_space"])
 
@@ -875,12 +864,16 @@ def init_nodes(config, agent_to_nodes=None):
         print("Finished creating clusters")
 
         for (cluster_center_location, cluster) in clusters.items():
-            agent = DeepLearningAgent(env=env, depth=4, state_space_dimensions=len(config["state_space"]), gamma=0.5,
-                                      epsilon=0.5, lr=0.001, sarsa=config["sarsa"],
-                                      replay_buffer=config["replay_buffer"],
-                                      double_deep=config["double_deep"]) \
-                if config["deep"] else \
-                    LearningAgent(env=env, gamma=0.5, epsilon=0.5, alpha=0.5, sarsa=config["sarsa"], mc=config["mc"])
+
+            if config["deep"]:
+                agent = DeepLearningAgent(env=env, depth=config["depth"], config=config, lr=0.001)
+            else:
+                agent = LearningAgent(env=env, config=config, alpha=0.5)
+
+            # Old way of differentiating between function approx. and tabular implementations
+            # agent = DeepLearningAgent(env=env, depth=4, config=config, lr=0.001) \
+            #     if config["deep"] else \
+            #         LearningAgent(env=env, config=config, alpha=0.5)
 
             # making sure each agent is assigned to at least one node
             # TODO (problem of uneven distribution of nodes!)
@@ -892,7 +885,7 @@ def init_nodes(config, agent_to_nodes=None):
         # only loading and saving of deep models has been implemented so far
         for id in list(agent_to_nodes.keys()):
 
-            agent = DeepLearningAgent(env=env, depth=4, gamma=0.5, epsilon=0.9, lr=0.001)
+            agent = DeepLearningAgent(env=env, depth=config["depth"], config=config, lr=0.001)
             agent.q_network.load_state_dict(torch.load(f"./model/agent_{id}.pth"))
             agent.q_network.eval()
             agents.append(agent)
@@ -905,10 +898,16 @@ def init_nodes(config, agent_to_nodes=None):
 
     return nodes, agents, env
 
-def run_nodes(nodes, env, days):
+def run_nodes(nodes, env, days, noma=True):
     # The simulation is kicked off after agents are assigned to respective clusters
-    for node in nodes:
-        env.process(node.run())
+    if noma:
+        for node in nodes:
+            env.process(node.run_noma())
+        env.process(nodes[0].noma.run())
+    else:
+        for node in nodes:
+            env.process(node.run())
+
     sim_time = 1000*60*60*24*days
     d = datetime.timedelta(milliseconds=sim_time)
     print('Running simulator for {}.'.format(d))
@@ -925,7 +924,7 @@ def plot_air_packages(configurations):
         nodes, agents, env = init_nodes(config=config)
         run_nodes(nodes, env, days=config["days"])
 
-def compare_before_and_after(configurations):
+def compare_before_and_after(configurations, save_to_local=False):
 
     first_run = True
     f, axarr = None, None
@@ -934,7 +933,7 @@ def compare_before_and_after(configurations):
         simulation_time = config["days"]*1000*60*60*24
         nodes, agents, env = init_nodes(config=config)
 
-        run_nodes(nodes, env, days=config["days"])
+        run_nodes(nodes, env, days=config["days"], noma=config["noma"])
 
         # basically number of plots in a column (times 2 for all nodes and average)
         num_categories = len(list(nodes[0].rl_measurements.keys()))
@@ -972,14 +971,16 @@ def compare_before_and_after(configurations):
                               "State space — [ {} ]\n" \
                               "Gamma — {}\n" \
                               "Epsilon — {}\n" \
+                              "Sector size — {}\n" \
                 .format(
                     config["title"],
                     config["num_nodes"],
                     config["days"],
                     ", ".join(config["state_space"]),
                     agents[0].gamma,
-                    agents[0].epsilon
-                )
+                    agents[0].epsilon,
+                    config["sector_size"],
+            )
 
             if (config["deep"]):
                 simulation_results += "Learning rate — {}".format(agents[0].lr)
@@ -1045,12 +1046,12 @@ def compare_before_and_after(configurations):
             temp = (parameter_cnt * 2) + 2
 
             if (len(configurations) == 1):
-                axarr[temp].plot(avg_per_parameter[parameter].keys(), avg_per_parameter[parameter].values())
+                axarr[temp].plot(list(avg_per_parameter[parameter].keys()), list(avg_per_parameter[parameter].values()))
                 axarr[temp].set_xlabel("Time")
                 axarr[temp].set_ylabel(f"{parameter} AVERAGE per Node")
                 axarr[temp].set_title(config["title"])
             else:
-                axarr[temp][config_cnt].plot(avg_per_parameter[parameter].keys(), avg_per_parameter[parameter].values())
+                axarr[temp][config_cnt].plot(list(avg_per_parameter[parameter].keys()), list(avg_per_parameter[parameter].values()))
                 axarr[temp][config_cnt].set_xlabel("Time")
                 axarr[temp][config_cnt].set_ylabel(f"{parameter} AVERAGE per Node")
                 axarr[temp][config_cnt].set_title(config["title"])
@@ -1103,12 +1104,13 @@ def compare_before_and_after(configurations):
                                           transform=axarr[-1][config_cnt].transAxes)
         simulation_results()
 
+    # if (save_to_local):
+    #    subprocess.run()
+
     plt.show()
 
-
-
+# Standard configuration values
 num_nodes = 1000
-
 locations = list()
 for i in range(num_nodes):
     locations.append(Location(min=0, max=Config.CELL_SIZE, indoor=False))
@@ -1117,12 +1119,14 @@ normal_reward = "normal"
 thoughput_reward = "throughput"
 energy_reward = "energy"
 
-no_adr_no_conf_config = {
-        "title": "NO ADR NO CONF",
+def generate_config(config):
+    standard_body = {
+        "title": "",
         "conf": False,
         "adr": False,
         "training": False,
         "deep": False,
+        "depth": 2,
         "sarsa": False,
         "mc": False,
         "replay_buffer": False,
@@ -1133,78 +1137,62 @@ no_adr_no_conf_config = {
         "reward": normal_reward,
         "days": 10,
         "locations": locations,
-        "state_space": [],
-        "sector_size": 50}
-adr_conf_config = {
-        "title": "ADR CONF",
-        "conf": True,
-        "adr": True,
-        "training": False,
-        "deep": False,
-        "sarsa": False,
-        "mc": False,
-        "replay_buffer": False,
-        "double_deep": False,
-        "load": False,
-        "save": False,
-        "num_nodes": num_nodes,
-        "reward": normal_reward,
-        "days": 10,
-        "locations": locations,
-        "state_space": [],
-        "sector_size": 50}
+        "state_space": ["tp", "sf", "channel"],
+        "sector_size": 100,
+        "gamma": 0.5,
+        "epsilon": 0.5,
+        # "slow_action": False,
+        "slow_sf": False,
+        "slow_tp": False,
+        "slow_channel": False,
+        "noma": False,
+        "device": torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+        "GLIE": False,
+    }
 
-configurations = [
-    no_adr_no_conf_config,
-    adr_conf_config,
-    {
-        "title": "Q learning",
-        "conf": False,
-        "adr": False,
-        "training": True,
-        "deep": True,
-        "sarsa": False,
-        "mc": False,
-        "replay_buffer": False,
-        "double_deep": False,
-        "load": False,
-        "save": False,
-        "num_nodes": num_nodes,
-        "reward": normal_reward,
-        "days": 10,
-        "locations": locations,
-        "state_space": ["tp", "sf", "channel"],
-        "sector_size": 100},
-    {
-        "title": "Double Deep Q-learning + Replay",
-        "conf": False,
-        "adr": False,
-        "training": True,
-        "deep": True,
-        "sarsa": False,
-        "mc": False,
-        "replay_buffer": True,
-        "double_deep": True,
-        "load": False,
-        "save": False,
-        "num_nodes": num_nodes,
-        "reward": normal_reward,
-        "days": 10,
-        "locations": locations,
-        "state_space": ["tp", "sf", "channel"],
-        "sector_size": 100}
+    for (key, val) in config.items():
+        standard_body[key] = val
+
+    return standard_body
+
+no_adr_no_conf_config = generate_config({
+    "title": "NO ADR NO CONF"})
+
+adr_conf_config = generate_config({
+    "title": "ADR CONF",
+    "conf": True,
+    "adr": True})
+# plot_air_packages(configurations=configurations)
+
+
+
+
+
+
+
+
+
+# NOW FREQUENCY STATE IS 0, 1, 2
+config_global = [
+    [
+        "simple stuff but with NOMA",
+        # no_adr_no_conf_config,
+        # adr_conf_config,
+        {
+            "title": "Deep Q learning",
+            "training": True,
+            "deep": True
+        },
+    ],
 ]
 
-compare_before_and_after(configurations=configurations)
 
+# Still to try buffer with new optimizations
+for i in range(len(config_global)):
 
+    for j in range(1, len(config_global[i])):
+        config_global[i][j] = generate_config(config_global[i][j])
+    print(f"\n\n\n STARTING SIMULATION: \t\t\t {config_global[i][0]} \n\n\n")
+    compare_before_and_after(configurations=config_global[i][1:], save_to_local=True)
 
-
-
-
-
-
-
-
-
-
+    print("\n\n\n#################################################################################################\n\n\n")

@@ -33,7 +33,42 @@ class LoRaParameters:
 
     # SPREADING_FACTORS = [12, 11, 10, 9, 8, 7]
     SPREADING_FACTORS = [7, 8, 9, 10, 11, 12]
+
+    SPREADING_FACTORS_COLOURS = {
+        7: 'red',
+        8: 'blue',
+        9: 'green',
+        10: 'cyan',
+        11: 'magenta',
+        12: 'black'
+    }
+
+    SPREADING_FACTORS_LABELS = {
+        7: 'sf = 7',
+        8: 'sf = 8',
+        9: 'sf = 9',
+        10: 'sf = 10',
+        11: 'sf = 11',
+        12: 'sf = 12'
+    }
+
     TRANSMISSION_POWERS = [2, 5, 8, 11, 14]
+
+    TRANSMISSION_POWERS_COLOURS = {
+        2: 'red',
+        5: 'blue',
+        8: 'green',
+        11: 'cyan',
+        14: 'magenta',
+    }
+
+    TRANSMISSION_POWERS_LABELS = {
+        2: 'tp = 2',
+        5:  'tp = 5',
+        8:  'tp = 8',
+        11: 'tp = 11',
+        14: 'tp = 14',
+    }
 
     DEFAULT_CHANNELS = [868100000, 868300000, 868500000]
     CHANNELS = [868100000, 868300000, 868500000, 868525000]
@@ -140,6 +175,8 @@ class LoRaParameters:
         else:
             self.h = 0
 
+        return self.sf
+
     def change_tp_to(self, tp: int):
         tmp = tp
 
@@ -147,6 +184,7 @@ class LoRaParameters:
             raise ValueError('Out of bound TP changing from ' + str(self.tp) + ' to ' + str(tmp))
 
         self.tp = tmp
+        return self.tp
 
     def tp_to_index(self, tp: int):
         try:

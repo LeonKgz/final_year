@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import math
 
+from Gateway2 import Gateway2
 from NOMA import NOMA
 from EnergyProfile import EnergyProfile
 from Gateway import Gateway
@@ -38,7 +39,7 @@ class NodeState(Enum):
 
 class Node2:
     def __init__(self, node_id, energy_profile: EnergyProfile, lora_parameters, sleep_time, process_time, adr, location,
-                 env, payload_size, air_interface, training, confirmed_messages, reward_type, state_space,
+                 env, payload_size, air_interface, training, confirmed_messages, reward_type, state_space, config,
                  tradeoff = 0.5, reach=Config.CELL_SIZE / math.sqrt(2)):
 
         self.num_tx_state_changes = 0
@@ -107,15 +108,39 @@ class Node2:
         self.rl_measurements = {
             "rewards": {},
             "throughputs": {},
-            # "energy_value": {},
-            # "energy_total": {},
             "energy_per_bit": {},
-            # "pkgs_in_air": {}
         }
+
+        self.rl_measurements_per_gateway = {}
+
+        for g in air_interface.gateways:
+            self.rl_measurements_per_gateway[g] = {
+                "rewards": {},
+                "throughputs": {},
+                "energy_per_bit": {},
+            }
+
+        self.counts = {
+            "Spreading Factor": {},
+            "Transmission Power": {},
+            "Channel": {},
+        }
+
+        for sf in LoRaParameters.SPREADING_FACTORS:
+            self.counts["Spreading Factor"][sf] = 0
+
+        for tp in LoRaParameters.TRANSMISSION_POWERS:
+            self.counts["Transmission Power"][tp] = 0
+
+        for channel in LoRaParameters.DEFAULT_CHANNELS:
+            self.counts["Channel"][channel] = 0
 
         self.actions = []
         self.state_space = state_space
         self.reach = reach
+        self.latest_base_station = None
+
+        self.config = config
 
     def plot(self, prop_measurements):
         plt.figure()
@@ -287,6 +312,8 @@ class Node2:
                 transition = (current_state, action, reward, next_state)
                 self.learning_agent.train_q_network(transition, self.id)
 
+            if (self.config["toy_logg"]):
+                print(f"                                         NODE {self.id} packet {packet.id} is incremented now")
             self.num_unique_packets_sent += 1  # at the end to be sure that this packet was tx
 
     # [----JOIN----]        [rx1]
@@ -418,8 +445,12 @@ class Node2:
             # downlink_message = None
 
     # This function is called by the gateway, once it finishes processing the respective uplink message
-    def noma_downlink(self, packet: UplinkMessage, downlink_message: DownlinkMessage):
+    def noma_downlink(self, packet: UplinkMessage, downlink_message: DownlinkMessage, gateway: Gateway2):
         #      Received at BS      #
+        self.latest_base_station = gateway
+
+        if (self.config["toy_log"]):
+            print(f"TOY_NOMA: ################ NODE: received packet {packet.node.id}-{packet.id} from gateway {gateway}, now about to process it")
         yield self.env.process(self.send_rx(self.env, packet, downlink_message))
 
         if downlink_message is None:
@@ -442,13 +473,15 @@ class Node2:
             if int(self.lora_param.dr) != int(downlink_message.adr_param['dr']):
                 if Config.PRINT_ENABLED:
                     print('\t\t Change DR {} to {}'.format(self.lora_param.dr, downlink_message.adr_param['dr']))
-                self.lora_param.change_dr_to(downlink_message.adr_param['dr'])
+                sf_result = self.lora_param.change_dr_to(downlink_message.adr_param['dr'])
+                self.counts["Spreading Factor"][sf_result] += 1
                 changed = True
             # change tp based on downlink_message['tp']
             if int(self.lora_param.tp) != int(downlink_message.adr_param['tp']):
                 if Config.PRINT_ENABLED:
                     print('\t\t Change TP {} to {}'.format(self.lora_param.tp, downlink_message.adr_param['tp']))
-                self.lora_param.change_tp_to(downlink_message.adr_param['tp'])
+                tp_result = self.lora_param.change_tp_to(downlink_message.adr_param['tp'])
+                self.counts["Transmission Power"][tp_result] += 1
                 changed = True
 
         if changed:
@@ -493,11 +526,16 @@ class Node2:
         yield self.env.timeout(LoRaParameters.RADIO_TX_PREP_TIME_MS)
 
         packet.on_air = self.env.now
-        gateway = self.air_interface.submit(packet)
+        if (self.config["toy_log"]):
+              print(f"TOY_NOMA: ################ NODE {self.id} calling air_interface.submit({packet.node.id}-{packet.id})")
+        gateways = self.air_interface.submit(packet)
 
         self.change_state(NodeState.TX)
         yield self.env.timeout(packet.my_time_on_air())
-        collided = self.air_interface.packet_received(packet, gateway)
+
+        if (self.config["toy_log"]):
+            print(f"TOY_NOMA: ################ NODE {self.id} calling air_interface.packet_received({packet.node.id}-{packet.id})")
+        collided = self.air_interface.packet_received(packet, gateways)
         return collided
 
     def send_rx(self, env, packet: UplinkMessage, downlink_message: DownlinkMessage):
@@ -606,7 +644,8 @@ class Node2:
                 packet.ack_retries_cnt += 1
                 if (packet.ack_retries_cnt % 2) == 1:
                     dr = np.amax([self.lora_param.dr - 1, LoRaParameters.LORAMAC_TX_MIN_DATARATE])
-                    self.lora_param.change_dr_to(dr)
+                    sf_result = self.lora_param.change_dr_to(dr)
+                    self.counts["Spreading Factor"][sf_result] += 1
                     packet.lora_param = self.lora_param
 
                 # set packet as retransmitted packet
@@ -749,7 +788,7 @@ class Node2:
 
     @staticmethod
     def get_mean_simulation_data_frame(nodes: list, name) -> pd.DataFrame:
-        data = Node.get_simulation_data_frame(nodes).sum(axis=0)
+        data = Node2.get_simulation_data_frame(nodes).sum(axis=0)
         data.name = name
         return pd.DataFrame(data).transpose()
 
@@ -787,21 +826,30 @@ class Node2:
         ch = (a[2].item())
 
         if (self.learning_agent.config["slow_tp"]):
-            self.lora_param.change_tp_to(self.attempt(tp, self.lora_param.tp, LoRaParameters.TRANSMISSION_POWERS))
+            tp_result = self.attempt(tp, self.lora_param.tp, LoRaParameters.TRANSMISSION_POWERS)
+            self.lora_param.change_tp_to(tp_result)
         else:
-            self.lora_param.change_tp_to(tp)
+            tp_result = tp
+            self.lora_param.change_tp_to(tp_result)
+        self.counts["Transmission Power"][tp_result] += 1
 
         if (self.learning_agent.config["slow_sf"]):
-            self.lora_param.change_sf_to(self.attempt(sf, self.lora_param.sf, LoRaParameters.SPREADING_FACTORS))
+            sf_result = self.attempt(sf, self.lora_param.sf, LoRaParameters.SPREADING_FACTORS)
+            self.lora_param.change_sf_to(sf_result)
         else:
-            self.lora_param.change_sf_to(sf)
+            sf_result = sf
+            self.lora_param.change_sf_to(sf_result)
+        self.counts["Spreading Factor"][sf_result] += 1
 
         if (self.learning_agent.config["slow_channel"]):
-            self.lora_param.change_channel_to(self.attempt(ch, self.lora_param.freq, LoRaParameters.DEFAULT_CHANNELS))
+            ch_result = self.attempt(ch, self.lora_param.freq, LoRaParameters.DEFAULT_CHANNELS)
+            self.lora_param.change_channel_to(ch_result)
         else:
-            self.lora_param.change_channel_to(ch)
+            ch_result = ch
+            self.lora_param.change_channel_to(ch_result)
+        self.counts["Channel"][ch_result] += 1
 
-        self.actions.append((tp, sf, ch))
+        self.actions.append((tp_result, sf_result, ch_result))
 
     # Current State (RL)
     def current_s(self):
@@ -875,8 +923,12 @@ class Node2:
         # delta = 1 if latest_sinr >= threshold else 0
         # phi = self.tradeoff
         # reward = delta * phi + delta * (1 - phi) * latest_throughput / self.energy_value
+        gateway = self.latest_base_station
 
-        latest_throughput = self.air_interface.prop_measurements[self.id]['throughput'][-1]
+        if (gateway == None):
+            return 0
+
+        latest_throughput = self.air_interface.prop_measurements[gateway][self.id]['throughput'][-1]
         latest_energy = self.energy_per_bit()
 
         if (self.reward_type == "energy"):
@@ -894,7 +946,11 @@ class Node2:
         self.rl_measurements["energy_per_bit"][self.env.now] = latest_energy
         # self.rl_measurements["pkgs_in_air"][self.env.now] = len(self.air_interface.packages_in_air)
 
+        self.rl_measurements_per_gateway[gateway]["rewards"][self.env.now] = reward
+        self.rl_measurements_per_gateway[gateway]["throughputs"][self.env.now] = latest_throughput
+        self.rl_measurements_per_gateway[gateway]["energy_per_bit"][self.env.now] = latest_energy
+
         return reward
 
-    def get_mean_throughput(self):
-        return np.mean(self.air_interface.prop_measurements[self.id]['throughput'])
+    def get_mean_throughput(self, gateway):
+        return np.mean(self.air_interface.prop_measurements[gateway][self.id]['throughput'])

@@ -201,7 +201,8 @@ class AirInterface:
         total_power_acc = 0
 
         if (packet in self.packages_in_air):
-            raise Exception('packet in question is in packages in air (added below) (AirInterface, line 200)')
+            print('packet in question is in packages in air (added below) (AirInterface, line 200)')
+            self.packages_in_air.remove(packet)
 
         for p in self.packages_in_air:
             # convert from dB values

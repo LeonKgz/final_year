@@ -20,7 +20,8 @@ from Node import Node
 from SINRModel import SINRModel
 from SNRModel import SNRModel
 from agent import LearningAgent
-from clustering_nodes import cluster_nodes, search_closest
+from clustering_nodes import cluster_nodes, search_closest, cluster_nodes_for_agents
+
 
 def plot_time(_env, sim_time):
     while True:
@@ -78,9 +79,14 @@ def init_nodes(config, agent_to_nodes=None):
             locations.append(Location(min=0, max=Config.CELL_SIZE, indoor=False))
 
     if (agent_to_nodes != None):
-        locations = []
-        for locs in list(agent_to_nodes.values()):
-            locations += [Location(x=x, y=y, indoor=False) for (x, y) in locs]
+        if (config["testing"]):
+            locations = []
+            for i in range(config["num_nodes"]):
+                locations.append(Location(min=0, max=Config.CELL_SIZE, indoor=False))
+        else:
+            locations = []
+            for locs in list(agent_to_nodes.values()):
+                locations += [Location(x=x, y=y, indoor=False) for (x, y) in locs]
 
     location_to_node = {}
 
@@ -152,18 +158,32 @@ def init_nodes(config, agent_to_nodes=None):
     else:
         # No need to check for deep entry of the configuration since
         # only loading and saving of deep models has been implemented so far
-        for id in list(agent_to_nodes.keys()):
+        if (config["testing"]):
+            for id in list(agent_to_nodes.keys()):
+                agent = LearningAgent(env=env, config=config)
+                agent.q_network.load_state_dict(torch.load(f"./models/agent_{id}.pth"))
+                agent.q_network.eval()
+                agents.append(agent)
+                example_location = agent_to_nodes[id][0]
+                agent.location = example_location
 
-            agent = LearningAgent(env=env, config=config)
-            agent.q_network.load_state_dict(torch.load(f"./models/agent_{id}.pth"))
-            agent.q_network.eval()
-            agents.append(agent)
+            print("\nCreating clusters of nodes for agents...")
+            cluster_nodes_for_agents(nodes, config["sector_size"], agents)
+            print("Finished creating clusters of nodes for agents\n")
 
-            cluster = []
-            for location in agent_to_nodes[id]:
-                cluster.append(location_to_node[location])
+        else:
+            for id in list(agent_to_nodes.keys()):
 
-            agent.assign_nodes(cluster)
+                agent = LearningAgent(env=env, config=config)
+                agent.q_network.load_state_dict(torch.load(f"./models/agent_{id}.pth"))
+                agent.q_network.eval()
+                agents.append(agent)
+
+                cluster = []
+                for location in agent_to_nodes[id]:
+                    cluster.append(location_to_node[location])
+
+                agent.assign_nodes(cluster)
 
     return nodes, agents, env
 
@@ -265,7 +285,7 @@ def energy_plots(configurations, file_name, save_to_local):
                                    label=('$\sigma_{dB}$: ' + str(variance) + ' (dB)'),
                                    color=colors[variance])
 
-    results.to_pickle("./results/sim_results")
+    results.to_pickle(f"./results/sim_results_" + config["label"])
 
     axarr.legend()
     if (save_to_local):
@@ -299,7 +319,46 @@ def energy_plots(configurations, file_name, save_to_local):
 def lload_pickle():
     with open("./results/sim_results.pkl", 'rb') as handle:
         b = pickle.load(handle)
-        print(b)
+        return b
+
+def saved_energy():
+    # Borrowed code START
+    sns.axes_style('white')
+    color = [(31, 119, 180), (174, 199, 232), (255, 127, 14), (255, 187, 120),
+             (44, 160, 44), (152, 223, 138), (214, 39, 40), (255, 152, 150),
+             (148, 103, 189), (197, 176, 213), (140, 86, 75), (196, 156, 148),
+             (227, 119, 194), (247, 182, 210), (127, 127, 127), (199, 199, 199),
+             (188, 189, 34), (219, 219, 141), (23, 190, 207), (158, 218, 229)]
+
+    for i in range(len(color)):
+        r, g, b = color[i]
+        color[i] = (r / 255., g / 255., b / 255.)
+
+    payload_sizes = range(5, 55, 5)
+    path_loss_variances = [0, 5, 7.8, 15, 20]
+
+    i = 0
+    j = 0
+    colors = dict()
+    for var in path_loss_variances:
+        colors[var] = color[j]
+        j += 1
+
+    num_plots = 1
+    f, axarr = plt.subplots(1, 1, sharex=True, sharey=False, figsize=(4,4))
+
+    results = lload_pickle()
+    for variance in path_loss_variances:
+        axarr.plot(list(payload_sizes),
+                   list(results[variance]),
+                   marker='o',
+                   linestyle='--',
+                   label=('$\sigma_{dB}$: ' + str(variance) + ' (dB)'),
+                   color=colors[variance])
+
+    axarr.legend()
+
+    plt.show()
 
 def run_configurations(configurations, file_name, save_to_local, main_theme, progression, rest):
 
@@ -656,8 +715,8 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
             #     tick.set_rotation(-45)
             # for i, val in enumerate(results[val]):
             #     axarr_results[cnt].text(i, val + 1, str("%.2f" % val), color='black', fontweight='bold')
-            ret.data_values = [float("%.2f" % v) for v in ret.datavalues]
-            axarr_results[cnt].bar_label(ret, label_type='center', fontweight='bold', fontsize=10)
+            # ret.datavalues = [float("" % v) for v in ret.datavalues]
+            axarr_results[cnt].bar_label(ret, fmt="%.2f", label_type='center', fontweight='bold', fontsize=10)
 
     plot_results()
 
@@ -737,11 +796,11 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
             f.write(input)
             f.close()
             print(f"Saved file {name}\n")
-    # save_figures()
+    save_figures()
     plt.show()
 
 # Standard configuration values
-num_nodes = 10
+num_nodes = 1000
 locations = list()
 for i in range(num_nodes):
     locations.append(Location(min=0, max=Config.CELL_SIZE, indoor=False))
@@ -791,6 +850,7 @@ def generate_config(config):
         "expected_sarsa": False,
         "path_variance": 7.8,
         "payload_size": 25,
+        "testing": False,
     }
 
     for (key, val) in config.items():

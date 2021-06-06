@@ -13,6 +13,7 @@ class LearningAgent:
         self.next_actions = {}
         self.config = config
         self.env = env
+        self.location = None
 
         self.sarsa = config["sarsa"]
         self.double_deep = config["double_deep"]

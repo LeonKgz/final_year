@@ -111,12 +111,12 @@ class Node:
             "energy_per_bit": {},
             "sinr": {},
             "rss": {},
-            "pkgs_in_air": {},
-            "E_transmitting": {},
-            "E_receiving": {},
-            "E_sleeping": {},
-            "E_processing": {},
-            "time_on_air": {},
+            # "pkgs_in_air": {},
+            # "E_transmitting": {},
+            # "E_receiving": {},
+            # "E_sleeping": {},
+            # "E_processing": {},
+            # "time_on_air": {},
             "packets_sent": {},
             "tp": {},
             "sf": {},
@@ -973,18 +973,18 @@ class Node:
 
         self.rl_measurements["sinr"][self.env.now] = latest_sinr
         self.rl_measurements["rss"][self.env.now] = latest_rss
-        self.rl_measurements["pkgs_in_air"][self.env.now] = len(self.air_interface.packages_in_air)
+        # self.rl_measurements["pkgs_in_air"][self.env.now] = len(self.air_interface.packages_in_air)
 
         # self.rl_measurements["E_transmitting"][self.env.now] = self.get_value_per_bit(self.energy_tracking[NodeState(NodeState.TX).name])
         # self.rl_measurements["E_receiving"][self.env.now] = self.get_value_per_bit(self.energy_tracking[NodeState(NodeState.RX).name])
         # self.rl_measurements["E_sleeping"][self.env.now] = self.get_value_per_bit(self.energy_tracking[NodeState(NodeState.SLEEP).name])
         # self.rl_measurements["E_processing"][self.env.now] = self.get_value_per_bit(self.energy_tracking[NodeState(NodeState.PROCESS).name])
-        self.rl_measurements["E_transmitting"][self.env.now] = self.energy_tracking[NodeState(NodeState.TX).name]
-        self.rl_measurements["E_receiving"][self.env.now] = self.energy_tracking[NodeState(NodeState.RX).name]
-        self.rl_measurements["E_sleeping"][self.env.now] = self.energy_tracking[NodeState(NodeState.SLEEP).name]
-        self.rl_measurements["E_processing"][self.env.now] = self.energy_tracking[NodeState(NodeState.PROCESS).name]
-
-        self.rl_measurements["time_on_air"][self.env.now] = curr_p.my_time_on_air()
+        # self.rl_measurements["E_transmitting"][self.env.now] = self.energy_tracking[NodeState(NodeState.TX).name]
+        # self.rl_measurements["E_receiving"][self.env.now] = self.energy_tracking[NodeState(NodeState.RX).name]
+        # self.rl_measurements["E_sleeping"][self.env.now] = self.energy_tracking[NodeState(NodeState.SLEEP).name]
+        # self.rl_measurements["E_processing"][self.env.now] = self.energy_tracking[NodeState(NodeState.PROCESS).name]
+        #
+        # self.rl_measurements["time_on_air"][self.env.now] = curr_p.my_time_on_air()
         self.rl_measurements["packets_sent"][self.env.now] = self.packets_sent
 
         self.rl_measurements["tp"][self.env.now] = curr_p.lora_param.tp

@@ -6,7 +6,7 @@ from bisect import bisect_left
 def cluster_nodes(nodes, sector_size):
 
     # 'dimensions' is the same for vertical and horizontal axis
-    dimensions = int(Config.CELL_SIZE / sector_size)
+    dimensions = int(nodes[0].config["cell_size"] / sector_size)
     cluster_centres = []
 
     xs = [(i+0.5)*sector_size for i in range(dimensions)]
@@ -34,7 +34,7 @@ def cluster_nodes(nodes, sector_size):
 
 def cluster_nodes_for_agents(nodes, sector_size, agents):
     # 'dimensions' is the same for vertical and horizontal axis
-    dimensions = int(Config.CELL_SIZE / sector_size)
+    dimensions = int(nodes[0].config["cell_size"] / sector_size)
     cluster_centres = []
 
     xs = [(i + 0.5) * sector_size for i in range(dimensions)]
@@ -59,9 +59,10 @@ def cluster_nodes_for_agents(nodes, sector_size, agents):
             clusters[(x, y)].append(n)
 
     for agent in agents:
-        x = search_closest(xs, agent.location.x)
-        y = search_closest(ys, agent.location.y)
-        agent.assign_nodes(clusters[(x, y)])
+        x = search_closest(xs, agent.location[0])
+        y = search_closest(ys, agent.location[1])
+        if ((x, y) in clusters):
+            agent.assign_nodes(clusters[(x, y)])
 
 # assuming locs is sorted finds the closest entry in locs to x
 def search_closest(locs, x):

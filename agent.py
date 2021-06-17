@@ -1,3 +1,5 @@
+### START ###
+
 from LoRaParameters import LoRaParameters
 
 import numpy as np
@@ -108,7 +110,7 @@ class LearningAgent:
                 state = node.current_s()
                 if (self.config["deep"]):
                     state = state.to(self.config["device"])
-                self.next_actions[node.id] = self.choose_next_action_epsilon_greedy(state, node_id=None)
+                self.next_actions[node.id] = self.choose_next_action(state, node_id=None)
 
         self.epsilon_update_rate = num_nodes * self.config["epsilon_decay_rate"]
         self.alpha_update_rate = num_nodes * self.config["alpha_decay_rate"]
@@ -135,7 +137,7 @@ class LearningAgent:
                 LoRaParameters.SPREADING_FACTORS.index(sf_S),
                 LoRaParameters.DEFAULT_CHANNELS.index(channel_S))
 
-    def choose_next_action_epsilon_greedy(self, curr_state, node_id, need_new_value=False):
+    def choose_next_action(self, curr_state, node_id, need_new_value=False):
 
         # this branch is executed at the start, when nodes are assigned to this lreaning agent
         # a random action will suffice
@@ -291,7 +293,7 @@ class LearningAgent:
 
         return ret
 
-    def train_q_network(self, transition, node_id):
+    def train_q(self, transition, node_id):
         if (self.config["deep"]):
             self.deep_train_q_network(transition, node_id)
         else:
@@ -368,7 +370,7 @@ class LearningAgent:
             # next_a = self.choose_next_action_epsilon_greedy(next_s, node_id=node_id)
             # next_a_index = self.action_to_index[next_a]
 
-            next_a = self.choose_next_action_epsilon_greedy(next_s, node_id=node_id, need_new_value=True)
+            next_a = self.choose_next_action(next_s, node_id=node_id, need_new_value=True)
             self.next_actions[node_id] = next_a
             next_a_index = self.action_to_index[next_a]
 
@@ -472,11 +474,11 @@ class LearningAgent:
                     self.next_actions[node_id] = next_a
                     target = reward + self.gamma * self.target_network(next_s)[self.action_to_index[next_a]]
             if self.config["expected_sarsa"]:
-                next_a = self.choose_next_action_epsilon_greedy(next_s, node_id, need_new_value=True)
+                next_a = self.choose_next_action(next_s, node_id, need_new_value=True)
                 self.next_actions[node_id] = next_a
                 target = reward + self.gamma * self.expected_action_value(next_s)
             else:
-                next_a = self.choose_next_action_epsilon_greedy(next_s, node_id, need_new_value=True)
+                next_a = self.choose_next_action(next_s, node_id, need_new_value=True)
                 self.next_actions[node_id] = next_a
                 target = reward + self.gamma * self.q_network(next_s)[self.action_to_index[next_a]]
         else:
@@ -1036,3 +1038,4 @@ class ReplayBuffer():
     #
     #     return loss
 
+### END ###

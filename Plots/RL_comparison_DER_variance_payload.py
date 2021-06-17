@@ -9,20 +9,24 @@ sns.axes_style('white')
 
 dir = '../Simulations/Measurements/'
 pc_prefix = 'ChannelVariance/paper_check'
-rl_prefix = 'reinforcement_learning'
+# rl_prefix = 'reinforcement_learning'
 
-node_files = [f'{pc_prefix}/adr_conf_simulation_results_node_',
-              f'{pc_prefix}/adr_no_conf_simulation_results_node_',
+node_files = [
+              # f'{pc_prefix}/adr_no_conf_simulation_results_node_',
               f'{pc_prefix}/no_adr_no_conf_simulation_results_node_',
-              f'{rl_prefix}/simulation_results_node_']
-gateway_files = [f'{pc_prefix}/adr_conf_gateway_results_',
-                 f'{pc_prefix}/adr_no_conf_gateway_results_',
-                 f'{pc_prefix}/no_adr_no_conf_gateway_results_',
-                 f'{rl_prefix}/gateway_results_']
-air_interface_files = [f'{pc_prefix}/adr_conf_air_interface_results_',
-                       f'{pc_prefix}/adr_no_conf_air_interface_results_',
-                       f'{pc_prefix}/no_adr_no_conf_air_interface_results_',
-                       f'{rl_prefix}/air_interface_results_']
+              f'{pc_prefix}/adr_conf_simulation_results_node_',]
+              # f'{rl_prefix}/simulation_results_node_']
+gateway_files = [
+    f'{pc_prefix}/no_adr_no_conf_gateway_results_',
+    f'{pc_prefix}/adr_conf_gateway_results_',
+                 # f'{pc_prefix}/adr_no_conf_gateway_results_',
+]
+                 # f'{rl_prefix}/gateway_results_']
+air_interface_files = [
+                        f'{pc_prefix}/no_adr_no_conf_air_interface_results_',
+                        f'{pc_prefix}/adr_conf_air_interface_results_',]
+                       # f'{pc_prefix}/adr_no_conf_air_interface_results_',
+                       # f'{rl_prefix}/air_interface_results_']
 
 color = [(31, 119, 180), (174, 199, 232), (255, 127, 14), (255, 187, 120),
          (44, 160, 44), (152, 223, 138), (214, 39, 40), (255, 152, 150),
@@ -54,18 +58,20 @@ for var in path_loss_variances:
     colors[var] = color[j]
     j += 1
 
-num_plots = 4
+num_plots = 3
 ax_id = range(0, num_plots)
 # Two subplots, the axes array is 1-d
-f, axarr = plt.subplots(2, 2, sharex=True, sharey=False, figsize=(10, 7))
+# f, axarr = plt.subplots(2, 2, sharex=True, sharey=False, figsize=(9, 3))
+f, axarr = plt.subplots(1, 3, sharex=True, sharey=True, figsize=(9, 3))
 
-titles = ["ADR, CONF", "ADR, NO CONF", "NO ADR, NO CONF", "RL"]
+titles = ["STATIC", "ADR", "DEEP Q"]
 
 for ax_id, air_f, gateway_f, node_f in zip(ax_id, air_interface_files, gateway_files, node_files):
-    ax_id_one = int(ax_id / 2)
-    ax_id_two = int(ax_id % 2)
-    ax = axarr[ax_id_one][ax_id_two]
+    # ax_id_one = int(ax_id / 2)
+    # ax_id_two = int(ax_id % 2)
+    # ax = axarr[ax_id_one][ax_id_two]
     # ax.set_title(air_f)
+    ax = axarr[ax_id]
     ax.set_title(titles[ax_id])
 
     # clean variables
@@ -87,7 +93,7 @@ for ax_id, air_f, gateway_f, node_f in zip(ax_id, air_interface_files, gateway_f
             channel_var[var].append(channel_variance[var][p])
 
     for var in path_loss_variances:
-        if (ax_id == 3):
+        if (ax_id == 2):
             ax.plot(payload_sizes, channel_var[var], marker='o', linestyle='--', label=('$\sigma_{dB}$: ' + str(var) + ' (dB)'), color=colors[var])
         else:
             ax.plot(payload_sizes, channel_var[var], marker='o', linestyle='--', color=colors[var])
@@ -103,9 +109,9 @@ for ax_id, air_f, gateway_f, node_f in zip(ax_id, air_interface_files, gateway_f
 f.legend(bbox_to_anchor=(1.0, 0.6), loc=2)
 f.subplots_adjust(left=0, right=0.02)
 f.tight_layout()
-plt.xlabel("Channel Variance")
+plt.xlabel("Payload Size")
 plt.ylabel("DER")
-# plt.show()
+plt.show()
 f.savefig(f"{os.getcwd()}/Figures/RL/RL_comparison_DER_variance_payload", bbox_inches='tight')
 
 # From inspecting the plots one can see that RL agent results in a higher

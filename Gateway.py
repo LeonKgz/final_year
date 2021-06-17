@@ -85,6 +85,7 @@ class Gateway:
 
         if packet.rss < self.SENSITIVITY[packet.lora_param.sf] or packet.snr < required_snr(packet.lora_param.dr):
             # the packet received is too weak
+            packet.node.weak_nodes_rejected += 1
             downlink_meta_msg.weak_packet = True
             self.uplink_packet_weak.append(packet)
             if (self.config["toy_log"]):
@@ -170,7 +171,12 @@ class Gateway:
 
         if (self.config["toy_log"]):
             print(f"TOY_NOMA: ################ GATEWAY: sending packet {packet.node.id}-{packet.id} to its node")
+
+
+
         yield self.env.process(from_node.noma_downlink(packet, downlink_msg))
+        # from_node.noma_downlink(packet, downlink_msg)
+        # from_node.noma_downlink(packet, downlink_msg)
         # yield self.env.timeout(1)
 
     def packet_received(self, from_node, packet: UplinkMessage, now):

@@ -1,0 +1,71 @@
+MAIN THEME 
+
+ {
+	"title": "Scalability",
+	"days": 3,
+	"static_locations": False,
+	"training": True,
+	"deep": True,
+	"noma": True,
+	"GLIE": True,
+	"Robbins-Monroe": True,
+	"epsilon_decay_rate": 1,
+	"alpha_decay_rate": 0.5,
+} 
+
+ PROGRESSION 
+
+ [
+	{
+		"label": "10",
+		"num_nodes": 10,
+	},
+	{
+		"label": "100",
+		"num_nodes": 100,
+	},
+] 
+
+ THE REST 
+
+ {
+	"toy_log": False,
+	"toy_logg": False,
+	"title": "Scalability",
+	"file_name": "",
+	"label": "10",
+	"conf": False,
+	"adr": False,
+	"training": True,
+	"deep": True,
+	"depth": 2,
+	"width": 100,
+	"sarsa": False,
+	"mc": False,
+	"replay_buffer": False,
+	"replay_buffer_scale": 1,
+	"double_deep": False,
+	"target_update_rate": 1,
+	"load": False,
+	"save": False,
+	"num_nodes": 10,
+	"reward": "normal",
+	"days": 3,
+	"locations": [<Location.Location object at 0x000001B47F976070>, <Location.Location object at 0x000001B47F9760A0>, <Location.Location object at 0x000001B47F976130>, <Location.Location object at 0x000001B42A9D6970>, <Location.Location object at 0x000001B42A9D6940>, <Location.Location object at 0x000001B42A9D69D0>, <Location.Location object at 0x000001B42AA08670>, <Location.Location object at 0x000001B42AA086D0>, <Location.Location object at 0x000001B42AA08730>, <Location.Location object at 0x000001B42AA08790>],
+	"static_locations": False,
+	"state_space": ['tp', 'sf', 'channel'],
+	"sector_size": 100,
+	"gamma": 0.5,
+	"slow_sf": False,
+	"slow_tp": False,
+	"slow_channel": False,
+	"noma": True,
+	"device": cpu,
+	"GLIE": True,
+	"Robbins-Monroe": True,
+	"epsilon_decay_rate": 1,
+	"alpha_decay_rate": 0.5,
+	"expected_sarsa": False,
+	"path_variance": 7.8,
+	"payload_size": 25,
+}

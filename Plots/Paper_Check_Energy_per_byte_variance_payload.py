@@ -23,7 +23,7 @@ for i in range(len(color)):
 dir = '../Simulations/Measurements/ChannelVariance/paper_check/'
 
 node_files = ['adr_conf_simulation_results_node_', 'adr_no_conf_simulation_results_node_',
-              'no_adr_no_conf_simulation_results_node_']
+                  'no_adr_no_conf_simulation_results_node_']
 gateway_files = ['adr_conf_gateway_results_', 'adr_no_conf_gateway_results_',
                  'no_adr_no_conf_gateway_results_']
 
@@ -41,11 +41,11 @@ for var in path_loss_variances:
 
 ax_id = range(0, 3)
 # Two subplots, the axes array is 1-d
-f, axarr = plt.subplots(3, sharex=True)
+f, axarr = plt.subplots(1, 3, sharex=True, figsize=(9, 3))
 
 for ax_id, node_f, gateway in zip(ax_id, node_files, gateway_files):
     ax = axarr[ax_id]
-    ax.set_title(node_f)
+    # ax.set_title(node_f)
     # clean variables
     for var in path_loss_variances:
         channel_variance[var] = dict()
@@ -64,7 +64,7 @@ for ax_id, node_f, gateway in zip(ax_id, node_files, gateway_files):
 
     for var in path_loss_variances:
         ax.plot(payload_sizes, channel_var[var], marker='o', linestyle='--', lw=1, color=colors[var],
-                 markersize=10, label=('$/sigma_{dB}$: ' + str(var) + ' (dB)'))
+                 markersize=5, label=('$/sigma_{dB}$: ' + str(var) + ' (dB)'))
         i += 1
 
 # Hide the right and top spines
@@ -74,7 +74,6 @@ for ax_id, node_f, gateway in zip(ax_id, node_files, gateway_files):
 # Only show ticks on the left and bottom spines
     ax.yaxis.set_ticks_position('left')
     ax.xaxis.set_ticks_position('bottom')
-
 
     # plt.savefig('./Figures/payload_vs_energy.eps', format='eps', dpi=1000)
 

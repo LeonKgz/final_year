@@ -30,6 +30,9 @@ def plot_time(_env, sim_time):
 
 
 def save_agents(agents):
+    models_dir = "./models"
+    if (not os.path.exists(models_dir)):
+        os.mkdir(models_dir)
 
     files = glob.glob('./models/*')
     for f in files:
@@ -49,26 +52,28 @@ def save_agents(agents):
     # pd_dict = pd.DataFrame.from_dict(agent_to_node)
     # pd_dict.to_pickle("./model/agent_to_node")
 
+
 # loads a dicitonary mapping agent model ids to locations of nodes (in a cluster)
 # associated with that model (learning agent)
 def load_agents(clusters="./models/agent_to_node"):
-
     with open('./models/agent_to_node', 'rb') as file:
         ret = pickle.load(file)
         return ret
 
     # return pd.read_pickle(clusters)
 
+
 def init_nodes(config, agent_to_nodes=None):
     energy_per_bit = 0
     tx_power_mW = {2: 91.8, 5: 95.9, 8: 101.6, 11: 120.8, 14: 146.5}  # measured TX power for each possible TP
-    middle = np.round(Config.CELL_SIZE / 2)
+    middle = np.round(config["cell_size"] / 2)
     gateway_location = Location(x=middle, y=middle, indoor=False)
     # plt.scatter(middle, middle, color='red')
     env = simpy.Environment()
     gateway = Gateway(env, gateway_location, config=config)
     nodes = []
-    air_interface = AirInterface(gateway, PropagationModel.LogShadow(std=config["path_variance"]), SNRModel(), SINRModel(), env, config=config)
+    air_interface = AirInterface(gateway, PropagationModel.LogShadow(std=config["path_variance"]), SNRModel(),
+                                 SINRModel(), env, config=config)
     noma = NOMA(gateway=gateway, air_interface=air_interface, env=env, config=config)
 
     if (config["static_locations"]):
@@ -76,22 +81,16 @@ def init_nodes(config, agent_to_nodes=None):
     else:
         locations = []
         for i in range(config["num_nodes"]):
-            locations.append(Location(min=0, max=Config.CELL_SIZE, indoor=False))
+            locations.append(Location(min=0, max=config["cell_size"], indoor=False))
 
-    if (agent_to_nodes != None):
-        if (config["testing"]):
-            locations = []
-            for i in range(config["num_nodes"]):
-                locations.append(Location(min=0, max=Config.CELL_SIZE, indoor=False))
-        else:
-            locations = []
-            for locs in list(agent_to_nodes.values()):
-                locations += [Location(x=x, y=y, indoor=False) for (x, y) in locs]
+    if (agent_to_nodes != None and not config["testing"]):
+        locations = []
+        for locs in list(agent_to_nodes.values()):
+            locations += [Location(x=x, y=y, indoor=False) for (x, y) in locs]
 
     location_to_node = {}
 
     for node_id in range(config["num_nodes"]):
-        # location = Location(min=0, max=Config.CELL_SIZE, indoor=False)
         location = locations[node_id]
         payload_size = config["payload_size"]
         transmission_rate = 0.02e-3  # 12*8 bits per hour (1 typical packet per hour)
@@ -119,73 +118,70 @@ def init_nodes(config, agent_to_nodes=None):
         location_to_node[(location.x, location.y)] = node
 
     agents = []
+    if (config["training"]):
+        if (agent_to_nodes == None):
 
-    if (agent_to_nodes == None):
+            # Creation of clusters and assignment of one learning agent per cluster
+            print("\nCreating clusters of nodes...")
+            clusters = cluster_nodes(nodes, sector_size=config["sector_size"])
+            print("Finished creating clusters\n")
 
-        # axes = plt.gca()
-        # axes.set_xlim([0, Config.CELL_SIZE])
-        # axes.set_ylim([0, Config.CELL_SIZE])
+            # for cluster in clusters.keys():
+            #     for node in clusters[cluster]:
+            #         plt.scatter(node.location.x, node.location.y, color='blue')
+            #
+            # for node in clusters[list(clusters.keys())[13]]:
+            #     plt.scatter(node.location.x, node.location.y, color='red')
+            #
+            # major_ticks = np.arange(0, 1001, config["sector_size"])
+            #
+            # axes.set_xticks(major_ticks)
+            # axes.set_yticks(major_ticks)
+            #
+            # plt.grid(True)
+            # plt.show()
 
-        # Creation of clusters and assignment of one learning agent per cluster
-        print("\nCreating clusters of nodes...")
-        clusters = cluster_nodes(nodes, sector_size=config["sector_size"])
-        print("Finished creating clusters\n")
+            # start_time = time.perf_counter()
+            for (cluster_center_location, cluster) in clusters.items():
 
-        # for cluster in clusters.keys():
-        #     for node in clusters[cluster]:
-        #         plt.scatter(node.location.x, node.location.y, color='blue')
-        #
-        # for node in clusters[list(clusters.keys())[13]]:
-        #     plt.scatter(node.location.x, node.location.y, color='red')
-        #
-        # major_ticks = np.arange(0, 1001, config["sector_size"])
-        #
-        # axes.set_xticks(major_ticks)
-        # axes.set_yticks(major_ticks)
-        #
-        # plt.grid(True)
-        # plt.show()
-
-        # start_time = time.perf_counter()
-        for (cluster_center_location, cluster) in clusters.items():
-
-            # making sure each agent is assigned to at least one node
-            # TODO (problem of uneven distribution of nodes!)
-            if len(cluster) > 0:
-                agent = LearningAgent(env=env, config=config)
-                agent.assign_nodes(cluster)
-                agents.append(agent)
-    else:
-        # No need to check for deep entry of the configuration since
-        # only loading and saving of deep models has been implemented so far
-        if (config["testing"]):
-            for id in list(agent_to_nodes.keys()):
-                agent = LearningAgent(env=env, config=config)
-                agent.q_network.load_state_dict(torch.load(f"./models/agent_{id}.pth"))
-                agent.q_network.eval()
-                agents.append(agent)
-                example_location = agent_to_nodes[id][0]
-                agent.location = example_location
-
-            print("\nCreating clusters of nodes for agents...")
-            cluster_nodes_for_agents(nodes, config["sector_size"], agents)
-            print("Finished creating clusters of nodes for agents\n")
-
+                # making sure each agent is assigned to at least one node
+                # TODO (problem of uneven distribution of nodes!)
+                if len(cluster) > 0:
+                    agent = LearningAgent(env=env, config=config)
+                    agent.assign_nodes(cluster)
+                    agents.append(agent)
         else:
-            for id in list(agent_to_nodes.keys()):
+            # No need to check for deep entry of the configuration since
+            # only loading and saving of deep models has been implemented so far
+            if (config["testing"]):
+                for id in list(agent_to_nodes.keys()):
+                    agent = LearningAgent(env=env, config=config)
+                    agent.q_network.load_state_dict(torch.load(f"./models/agent_{id}.pth"))
+                    agent.q_network.eval()
+                    agents.append(agent)
+                    example_location = agent_to_nodes[id][0]
+                    agent.location = example_location
 
-                agent = LearningAgent(env=env, config=config)
-                agent.q_network.load_state_dict(torch.load(f"./models/agent_{id}.pth"))
-                agent.q_network.eval()
-                agents.append(agent)
+                print("\nCreating clusters of nodes for agents...")
+                cluster_nodes_for_agents(nodes, config["sector_size"], agents)
+                print("Finished creating clusters of nodes for agents\n")
 
-                cluster = []
-                for location in agent_to_nodes[id]:
-                    cluster.append(location_to_node[location])
+            else:
+                for id in list(agent_to_nodes.keys()):
 
-                agent.assign_nodes(cluster)
+                    agent = LearningAgent(env=env, config=config)
+                    agent.q_network.load_state_dict(torch.load(f"./models/agent_{id}.pth"))
+                    agent.q_network.eval()
+                    agents.append(agent)
+
+                    cluster = []
+                    for location in agent_to_nodes[id]:
+                        cluster.append(location_to_node[location])
+
+                    agent.assign_nodes(cluster)
 
     return nodes, agents, env
+
 
 def run_nodes(nodes, env, days, noma=True):
     # The simulation is kicked off after agents are assigned to respective clusters
@@ -197,21 +193,22 @@ def run_nodes(nodes, env, days, noma=True):
         for node in nodes:
             env.process(node.run())
 
-    sim_time = 1000*60*60*24*days
+    sim_time = 1000 * 60 * 60 * 24 * days
     d = datetime.timedelta(milliseconds=sim_time)
     print('Running simulator for {}.'.format(d))
     env.process(plot_time(env, sim_time))
     env.run(until=sim_time)
 
-def plot_air_packages(configurations):
 
+def plot_air_packages(configurations):
     first_run = True
     f, axarr = None, None
 
     for config_cnt, config in enumerate(configurations):
-        simulation_time = config["days"]*1000*60*60*24
+        simulation_time = config["days"] * 1000 * 60 * 60 * 24
         nodes, agents, env = init_nodes(config=config)
         run_nodes(nodes, env, days=config["days"])
+
 
 def health_check(configurations, days):
     print("\n##################          Health check             ###################")
@@ -221,8 +218,8 @@ def health_check(configurations, days):
         run_nodes(nodes, env, days=days, noma=config["noma"])
     print("\n##################        Health check OKAY          ###################")
 
-def energy_plots(configurations, file_name, save_to_local):
 
+def energy_plots(configurations, file_name, save_to_local):
     # Borrowed code START
     sns.axes_style('white')
     color = [(31, 119, 180), (174, 199, 232), (255, 127, 14), (255, 187, 120),
@@ -238,9 +235,6 @@ def energy_plots(configurations, file_name, save_to_local):
     payload_sizes = range(5, 55, 5)
     path_loss_variances = [0, 5, 7.8, 15, 20]
 
-    payload_sizes = [25, 30, 35]
-    path_loss_variances = [7.8, 20]
-
     i = 0
     j = 0
     colors = dict()
@@ -254,7 +248,10 @@ def energy_plots(configurations, file_name, save_to_local):
 
     num_plots = len(configurations)
 
-    f, axarr = plt.subplots(1, num_plots, sharex=True, sharey=False, figsize=(4*num_plots, 4))
+    f, axarr = plt.subplots(1, num_plots, sharex=True, sharey=False, figsize=(4 * num_plots, 4))
+
+    if (num_plots == 1):
+        axarr = [axarr]
 
     results = {}
     for v in path_loss_variances:
@@ -267,16 +264,18 @@ def energy_plots(configurations, file_name, save_to_local):
         # axarr.set_title(config["label"])
         for variance in path_loss_variances:
             for payload in payload_sizes:
-
                 config["path_variance"] = variance
                 config["payload_size"] = payload
 
                 nodes, agents, env = init_nodes(config=config, agent_to_nodes=load_agents() if config["load"] else None)
                 run_nodes(nodes, env, days=config["days"], noma=config["noma"])
 
-                mu, sigma = Node.get_energy_per_byte_stats(nodes, nodes[0].base_station)
-
-                results[variance].append(mu)
+                tx = sum([node.num_unique_packets_sent for node in nodes])
+                rx = nodes[0].base_station.distinct_packets_received
+                der = (rx / tx) * 100
+                results[variance].append(der)
+                # mu, sigma = Node.get_energy_per_byte_stats(nodes, nodes[0].base_station)
+                # results[variance].append(mu)
 
             axarr[config_cnt].plot(list(payload_sizes),
                                    list(results[variance]),
@@ -285,41 +284,51 @@ def energy_plots(configurations, file_name, save_to_local):
                                    label=('$\sigma_{dB}$: ' + str(variance) + ' (dB)'),
                                    color=colors[variance])
 
-    results.to_pickle(f"./results/sim_results_" + config["label"])
+            axarr[config_cnt].legend()
 
-    axarr.legend()
-    if (save_to_local):
-        # assuming that the local machine is running Windows
-        now = datetime.datetime.now()
-        current_date = now.strftime("%d.%m.%Y")
-        current_hour = now.strftime("%H")
-        save_dir_date = f"../Plot Diary/{current_date}/"
-        save_dir = f"../Plot Diary/{current_date}/{current_hour}/"
-        if (not os.path.exists(save_dir_date)):
-            os.mkdir(save_dir_date)
-    else:
-        # assuming that the NOT local machine is running Linux
-        save_dir = "./plots/"
+        results_dir = "./results"
+        if (not os.path.exists(results_dir)):
+            os.mkdir(results_dir)
 
-    if not os.path.exists(save_dir):
-        os.mkdir(save_dir)
+        label = config["label"]
+        file_name = f"{results_dir}/sim_results_{label}.pkl"
+        with open(file_name, 'wb') as file:
+            pickle.dump(results, file, protocol=pickle.HIGHEST_PROTOCOL)
 
-    save_dir = save_dir + f"{file_name}/"
-    if not os.path.exists(save_dir):
-        os.mkdir(save_dir)
+        # results.to_pickle(f"./results/sim_results_" + config["label"])
 
-    name = save_dir + name + ".png"
-    f.savefig(name)
-    print(f"\nSaved plot {name}")
-
-
+        # if (save_to_local):
+        #     # assuming that the local machine is running Windows
+        #     now = datetime.datetime.now()
+        #     current_date = now.strftime("%d.%m.%Y")
+        #     current_hour = now.strftime("%H")
+        #     save_dir_date = f"../Plot Diary/{current_date}/"
+        #     save_dir = f"../Plot Diary/{current_date}/{current_hour}/"
+        #     if (not os.path.exists(save_dir_date)):
+        #         os.mkdir(save_dir_date)
+        # else:
+        #     # assuming that the NOT local machine is running Linux
+        #     save_dir = "./plots/"
+        #
+        # if not os.path.exists(save_dir):
+        #     os.mkdir(save_dir)
+        #
+        # save_dir = save_dir + f"{file_name}/"
+        # if not os.path.exists(save_dir):
+        #     os.mkdir(save_dir)
+        #
+        # name = save_dir + name + ".png"
+        # f.savefig(name)
+        # print(f"\nSaved plot {name}")
 
     plt.show()
+
 
 def lload_pickle():
     with open("./results/sim_results.pkl", 'rb') as handle:
         b = pickle.load(handle)
         return b
+
 
 def saved_energy():
     # Borrowed code START
@@ -345,7 +354,7 @@ def saved_energy():
         j += 1
 
     num_plots = 1
-    f, axarr = plt.subplots(1, 1, sharex=True, sharey=False, figsize=(4,4))
+    f, axarr = plt.subplots(1, 1, sharex=True, sharey=False, figsize=(4, 4))
 
     results = lload_pickle()
     for variance in path_loss_variances:
@@ -360,8 +369,8 @@ def saved_energy():
 
     plt.show()
 
-def run_configurations(configurations, file_name, save_to_local, main_theme, progression, rest):
 
+def run_configurations(configurations, file_name, save_to_local, main_theme, progression, rest):
     first_run = True
     f_large, axarr_large = None, None
     f_small, axarr_small = None, None
@@ -376,7 +385,7 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
 
     # plots all configs in configurations on one large plot, and duplicates most important data onto a smaller plot
     for config_cnt, config in enumerate(configurations):
-        simulation_time = config["days"]*1000*60*60*24
+        simulation_time = config["days"] * 1000 * 60 * 60 * 24
         nodes, agents, env = init_nodes(config=config, agent_to_nodes=load_agents() if config["load"] else None)
 
         run_nodes(nodes, env, days=config["days"], noma=config["noma"])
@@ -398,13 +407,15 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
             num_columns_large = len(configurations) + 1
             num_rows_large = num_categories * 2 + 3
             # adding 3 additional plots for simulation info at the top, loss and results at the bottom
-            f_large, axarr_large = plt.subplots(num_rows_large, num_columns_large, figsize=(num_columns_large * 7, num_rows_large * 5),
-                                    sharex='col', sharey='row')
+            f_large, axarr_large = plt.subplots(num_rows_large, num_columns_large,
+                                                figsize=(num_columns_large * 7, num_rows_large * 5),
+                                                sharex='col', sharey='row')
 
             num_columns_small = num_categories
             num_rows_small = 1
             # adding 3 additional plots for simulation info at the top, loss and results at the bottom
-            f_small, axarr_small = plt.subplots(num_rows_small, num_columns_small, figsize=(num_columns_small * 7, num_rows_small * 5),
+            f_small, axarr_small = plt.subplots(num_rows_small, num_columns_small,
+                                                figsize=(num_columns_small * 7, num_rows_small * 5),
                                                 sharex=True)
 
             # setting up plots for histograms of results for DER, EE, etc.
@@ -431,22 +442,22 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
             num_rows_counts = 1
             num_columns_counts = len(counts.keys())
             f_counts, axarr_counts = plt.subplots(num_rows_counts, num_columns_counts,
-                                                    figsize=(num_columns_counts * 7, num_rows_counts * 5))
+                                                  figsize=(num_columns_counts * 7, num_rows_counts * 5))
 
             f_sf_distro, axarr_sf_distro = plt.subplots(1, len(configurations), figsize=(7 * len(configurations), 7))
-            major_ticks = np.arange(0, 1001, config["sector_size"])
+            major_ticks = np.arange(0, config["cell_size"]+1, config["sector_size"])
             for ax in axarr_sf_distro:
-                ax.set_xlim([0, Config.CELL_SIZE])
-                ax.set_ylim([0, Config.CELL_SIZE])
+                ax.set_xlim([0, config["cell_size"]])
+                ax.set_ylim([0, config["cell_size"]])
                 ax.set_xticks(major_ticks)
                 ax.set_yticks(major_ticks)
                 ax.grid(True)
 
             f_tp_distro, axarr_tp_distro = plt.subplots(1, len(configurations), figsize=(7 * len(configurations), 7))
-            major_ticks = np.arange(0, 1001, config["sector_size"])
+            major_ticks = np.arange(0, config["cell_size"]+1, config["sector_size"])
             for ax in axarr_tp_distro:
-                ax.set_xlim([0, Config.CELL_SIZE])
-                ax.set_ylim([0, Config.CELL_SIZE])
+                ax.set_xlim([0, config["cell_size"]])
+                ax.set_ylim([0, config["cell_size"]])
                 ax.set_xticks(major_ticks)
                 ax.set_yticks(major_ticks)
                 ax.grid(True)
@@ -472,28 +483,31 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
             props = dict(alpha=0.6)
 
             simulation_results = "Flavour — {}\n" \
-                              "Number of nodes — {}\n" \
-                              "Simulation time — {} days\n" \
-                              "State space — [ {} ]\n" \
-                              "Gamma — {}\n" \
-                              "Epsilon — {}\n" \
-                              "Sector size — {}\n" \
+                                 "Number of nodes — {}\n" \
+                                 "Simulation time — {} days\n" \
+                                 "State space — [ {} ]\n" \
+                                 "Gamma — {}\n" \
+                                 "Epsilon — {}\n" \
+                                 "Sector size — {}\n" \
                 .format(
-                    config["title"],
-                    config["num_nodes"],
-                    config["days"],
-                    ", ".join(config["state_space"]),
-                    agents[0].gamma,
-                    agents[0].epsilon,
-                    config["sector_size"],
+                config["title"],
+                config["num_nodes"],
+                config["days"],
+                ", ".join(config["state_space"]),
+                agents[0].gamma if config["training"] else "N/A",
+                agents[0].epsilon if config["training"] else "N/A",
+                config["sector_size"],
             )
 
-            simulation_results += "Learning rate (Alpha) — {}".format(agents[0].alpha)
+            simulation_results += "Learning rate (Alpha) — {}".format(agents[0].alpha if config["training"] else "N/A")
 
             if (len(configurations) == 1):
-                axarr_large[0].text(0.1, 0.9, simulation_results, fontsize=20, bbox=props, verticalalignment='top', transform=axarr_large[0].transAxes)
+                axarr_large[0].text(0.1, 0.9, simulation_results, fontsize=20, bbox=props, verticalalignment='top',
+                                    transform=axarr_large[0].transAxes)
             else:
-                axarr_large[0][config_cnt].text(0.1, 0.9, simulation_results, fontsize=20, bbox=props, verticalalignment='top', transform=axarr_large[0][config_cnt].transAxes)
+                axarr_large[0][config_cnt].text(0.1, 0.9, simulation_results, fontsize=20, bbox=props,
+                                                verticalalignment='top', transform=axarr_large[0][config_cnt].transAxes)
+
         simulation_info()
 
         # Two sets of plots to indicate when during the simulation nodes had their history collected to a point where
@@ -508,7 +522,7 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
 
         # Setting titles for the distribution plots
         axarr_sf_distro[config_cnt].set_title(config["label"].upper())
-        axarr_tp_distro[config_cnt].set_title(config["label"].upper()   )
+        axarr_tp_distro[config_cnt].set_title(config["label"].upper())
 
         # TODO First simply plotting all the nodes at the same time, while also recording data for averaging later
         for node in nodes:
@@ -553,7 +567,8 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
         # TODO Now plotting the mean values for above
         for parameter_cnt, parameter in enumerate(list(nodes[0].rl_measurements.keys())):
             length_per_parameter[parameter] = int(length_per_parameter[parameter] / len(nodes))
-            times_per_parameter[parameter] = [i for i in range(0, simulation_time, int(simulation_time / length_per_parameter[parameter]))]
+            times_per_parameter[parameter] = [i for i in range(0, simulation_time,
+                                                               int(simulation_time / length_per_parameter[parameter]))]
 
             parameter_records = {}
             for time in times_per_parameter[parameter]:
@@ -577,14 +592,15 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
             temp = (parameter_cnt * 2) + 2
 
             if (len(configurations) == 1):
-                axarr_large[temp].plot(list(avg_per_parameter[parameter].keys()), list(avg_per_parameter[parameter].values()))
+                axarr_large[temp].plot(list(avg_per_parameter[parameter].keys()),
+                                       list(avg_per_parameter[parameter].values()))
                 axarr_large[temp].set_xlabel("Time")
                 axarr_large[temp].set_ylabel(f"{parameter} AVERAGE per Node")
                 axarr_large[temp].set_title(config["title"])
             else:
                 axarr_large[temp][config_cnt].plot(list(avg_per_parameter[parameter].keys()),
-                                             list(avg_per_parameter[parameter].values()),
-                                             label=list(avg_per_parameter[parameter].values())[-1])
+                                                   list(avg_per_parameter[parameter].values()),
+                                                   label=list(avg_per_parameter[parameter].values())[-1])
                 axarr_large[temp][config_cnt].set_xlabel("Time")
                 axarr_large[temp][config_cnt].set_ylabel(f"{parameter} AVERAGE per Node")
                 axarr_large[temp][config_cnt].set_title(config["title"])
@@ -592,17 +608,16 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
 
                 # Plotting all mean plots together in the last solumn of the large plot
                 axarr_large[temp][-1].plot(list(avg_per_parameter[parameter].keys()),
-                                             list(avg_per_parameter[parameter].values()), label=config["label"])
+                                           list(avg_per_parameter[parameter].values()), label=config["label"])
                 axarr_large[temp][-1].set_xlabel("Time")
                 axarr_large[temp][-1].set_ylabel(f"{parameter} AVERAGE per Node")
                 axarr_large[temp][-1].set_title("Comparison")
                 axarr_large[temp][-1].legend()
 
-
                 # Plotting all mean plots together in the small plot
 
                 axarr_small[parameter_cnt].plot(list(avg_per_parameter[parameter].keys()),
-                                     list(avg_per_parameter[parameter].values()), label=config["label"])
+                                                list(avg_per_parameter[parameter].values()), label=config["label"])
                 axarr_small[parameter_cnt].set_xlabel("Time")
                 axarr_small[parameter_cnt].set_ylabel(f"{parameter} - mean per node")
                 axarr_small[parameter_cnt].set_title(config["title"])
@@ -683,7 +698,7 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
                 # Display information about simulation results (at the bottom)
                 props = dict(alpha=0.6)
                 simulation_results = "Throughput — {:.2f}\n" \
-                                  "EE (Packets/Joule) — {:.2f}\n" \
+                                     "EE (Packets/Joule) — {:.2f}\n" \
                     .format(
                     mean_throughput,
                     num_packets_avg / energy_avg,
@@ -792,22 +807,26 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
             progression_dict = progression_to_str(progression)
             rest_dict = dict_to_str(rest)
 
-            input  = f"MAIN THEME \n\n {main_theme_dict} \n\n PROGRESSION \n\n {progression_dict} \n\n THE REST \n\n {rest_dict}"
+            input = f"MAIN THEME \n\n {main_theme_dict} \n\n PROGRESSION \n\n {progression_dict} \n\n THE REST \n\n {rest_dict}"
             f.write(input)
             f.close()
             print(f"Saved file {name}\n")
+
     save_figures()
     plt.show()
 
+
 # Standard configuration values
 num_nodes = 1000
+cell_size = 1000
 locations = list()
 for i in range(num_nodes):
-    locations.append(Location(min=0, max=Config.CELL_SIZE, indoor=False))
+    locations.append(Location(min=0, max=cell_size, indoor=False))
 
 normal_reward = "normal"
 thoughput_reward = "throughput"
 energy_reward = "energy"
+
 
 def generate_config(config):
     standard_body = {
@@ -842,6 +861,7 @@ def generate_config(config):
         "slow_tp": False,
         "slow_channel": False,
         "noma": False,
+        "noma_conf": False,
         "device": torch.device("cuda" if torch.cuda.is_available() else "cpu"),
         "GLIE": False,
         "Robbins-Monroe": False,
@@ -851,6 +871,7 @@ def generate_config(config):
         "path_variance": 7.8,
         "payload_size": 25,
         "testing": False,
+        "cell_size": cell_size,
     }
 
     for (key, val) in config.items():
@@ -858,43 +879,66 @@ def generate_config(config):
 
     return standard_body
 
+
 # Hypertuning progression
 progression = [
+
     {
-        "label": "10",
-        "num_nodes": 1,
+        "title": "",
+        "label": "noma static",
+        "noma": True,
     },
     {
-        "label": "100",
-        "num_nodes": 1,
+        "title": "",
+        "label": "static",
     },
-    # {
-    #     "label": "1000",
-    #     "num_nodes": 1000,
-    # },
-    # {
-    #     "label": "10000",
-    #     "num_nodes": 10000,
-    # },
+]
+
+progression1 = [
+    {
+        "title": "",
+        "label": "adr",
+        "adr": True,
+        "conf": True,
+    },
+    {
+        "title": "",
+        "label": "noma adr",
+        "noma": True,
+        "adr": True,
+        "conf": True,
+    },
 ]
 
 config_global = [
     [
-        "scalability",
+        "testing",
         {
-            "title": "Scalability",
-            "days": 2,
-            "static_locations": False,
-            # "training": True,
+            "title": "Enabling NOMA",
+            "days": 5,
+            # "locations": locations,
+            # "static_locations": True,
+            "num_nodes": 10,
+            "toy_log": True,
+            "toy_logg": True,
+            # "load": True,
             # "deep": True,
-            # "noma": True,
-            # "GLIE": True,
-            # "Robbins-Monroe": True,
-            # "epsilon_decay_rate": 1,
-            # "alpha_decay_rate": 0.5,
         },
         progression
     ],
+    # [
+    #     "testing",
+    #     {
+    #         "title": "Enabling NOMA",
+    #         "days": 20,
+    #         "locations": locations,
+    #         "static_locations": True,
+    #         "num_nodes": 1000,
+    #         # "load": True,
+    #         # "deep": True,
+    #     },
+    #     progression1
+    # ],
 ]
 # Still to try buffer with new optimizations
 for i in range(len(config_global)):
@@ -922,9 +966,9 @@ for i in range(len(config_global)):
 
     print(f"\n\n\n STARTING SIMULATION: \t\t\t {simulation_name} \n\n\n")
     # try:
-    # health_check(configurations=configs_combination_per_simulation, days=0.1)
+    health_check(configurations=configs_combination_per_simulation, days=0.1)
     run_configurations(configurations=configs_combination_per_simulation,
-                       save_to_local=False,
+                       save_to_local=True,
                        file_name=config_global[i][0],
                        main_theme=main_theme,
                        progression=progression,
@@ -942,5 +986,4 @@ for i in range(len(config_global)):
 
     print(
         "\n\n\n#################################################################################################\n\n\n")
-
 

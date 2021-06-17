@@ -202,7 +202,10 @@ class AirInterface:
 
         if (packet in self.packages_in_air):
             print('packet in question is in packages in air (added below) (AirInterface, line 200)')
-            self.packages_in_air.remove(packet)
+            try:
+                self.packages_in_air.remove(packet)
+            except ValueError as e:
+                print(e)
 
         for p in self.packages_in_air:
             # convert from dB values
@@ -244,7 +247,10 @@ class AirInterface:
         if collided:
             self.num_of_packets_collided += 1
             # print('Our packet has collided')
-        self.packages_in_air.remove(packet)
+        try:
+           self.packages_in_air.remove(packet)
+        except ValueError as e:
+            print(e)
         # print("UPDATE ON PACKET" + str(packet))
         # print("\nPACKETS IN AIR - " + str(self.packages_in_air) + "\n")
         self.prop_measurements[packet.node.id]['pkgs_in_air'].append(len(self.packages_in_air))
@@ -261,6 +267,11 @@ class AirInterface:
         return collided
 
     def noma_insert(self, p_new):
+
+        # if (not self.config["noma_conf"]):
+        #     self.packages_in_air_to_noma.append(p_new)
+        #     return
+
         if (len(self.packages_in_air_to_noma) == 0):
             self.packages_in_air_to_noma.append(p_new)
         elif (p_new.rss > self.packages_in_air_to_noma[-1].rss):

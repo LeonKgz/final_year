@@ -19,6 +19,7 @@ class NOMA:
                 if (self.config["toy_log"]):
                     print(f"TOY_NOMA: ################ NOMA: calling self.gateway.packet_received_noma({to_process.node.id}-{to_process.id})")
                 yield self.env.process(self.gateway.packet_received_noma(to_process.node, to_process, self.env.now))
+                # self.gateway.packet_received_noma(to_process.node, to_process, self.env.now)
             else:
                 # if (self.config["toy_log"]):
                 #     print(f"TOY_NOMA: ################ NOMA: queue is empty, going to sleep...")

@@ -87,7 +87,7 @@ class Node2:
         self.packet_to_sent = None
 
         self.time_off = dict()
-        for ch in LoRaParameters.CHANNELS:
+        for ch in LoRaParameters.DEFAULT_CHANNELS:
             self.time_off[ch] = 0
 
         self.confirmed_messages = confirmed_messages
@@ -221,7 +221,7 @@ class Node2:
                 current_state = self.current_s()
                 # if isinstance(self.learning_agent, DeepLearningAgent):
                 #     current_state = current_state.to(self.learning_agent.device)
-                action = self.learning_agent.choose_next_action_epsilon_greedy(current_state, self.id)
+                action = self.learning_agent.choose_next_action(current_state, self.id)
                 self.take_action(action)
 
             random_wait = np.random.randint(0, Config.MAX_DELAY_BEFORE_SLEEP_MS)
@@ -280,7 +280,7 @@ class Node2:
                 current_state = self.current_s()
                 # if isinstance(self.learning_agent, DeepLearningAgent):
                 #         current_state = current_state.to(self.learning_agent.device)
-                action = self.learning_agent.choose_next_action_epsilon_greedy(current_state, self.id)
+                action = self.learning_agent.choose_next_action(current_state, self.id)
                 self.take_action(action)
 
             random_wait = np.random.randint(0, Config.MAX_DELAY_BEFORE_SLEEP_MS)
@@ -375,6 +375,7 @@ class Node2:
             channel = min(self.time_off, key=self.time_off.get)
             # update to best_channel
             packet.lora_param.freq = channel
+            self.counts["Channel"][channel] += 1
 
         if self.time_off[channel] > self.env.now:
             # wait for certaint time to respect duty cycle
@@ -419,6 +420,7 @@ class Node2:
             channel = min(self.time_off, key=self.time_off.get)
             # update to best_channel
             packet.lora_param.freq = channel
+            self.counts["Channel"][channel] += 1
 
         if self.time_off[channel] > self.env.now:
             # wait for certaint time to respect duty cycle

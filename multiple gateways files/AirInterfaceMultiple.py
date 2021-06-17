@@ -5,7 +5,6 @@ import PropagationModel
 from GatewayMultiple import Gateway2
 from LNS import LNS
 from Location import Location
-from Gateway import Gateway
 from LoRaPacket import UplinkMessage
 import matplotlib.pyplot as plt
 import pandas as pd

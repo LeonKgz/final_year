@@ -26,7 +26,6 @@ class AirInterface:
         self.snr_model = snr_model
         self.sinr_model = sinr_model
         self.env = env
-
         self.config = config
 
     @staticmethod
@@ -196,7 +195,8 @@ class AirInterface:
         packet.rss = rss
         snr = self.snr_model.rss_to_snr(rss)
         packet.snr = snr
-        # TODO remove users from other channels
+
+        ### START ###
 
         total_power_acc = 0
 
@@ -215,15 +215,13 @@ class AirInterface:
                total_power_acc += p_rss
 
         np.seterr(divide='ignore')
-        # np.seterr(divide='warn')
         total_power_db = 10 * np.log10(total_power_acc)
-
-        # sinr = self.sinr_model.rss_to_sinr(rss, sum(filter(lambda x: x < rss, map(lambda x: x.rss, filter(lambda x: x.lora_param.freq == packet.lora_param.freq, self.packages_in_air)))))
-        # sinr = self.sinr_model.rss_to_sinr(rss, sum(filter(lambda x: x < rss, map(lambda x: x.rss, self.packages_in_air))))
 
         sinr = self.sinr_model.rss_to_sinr(rss, total_power_db)
         packet.sinr = sinr
         throughput = self.sinr_model.sinr_to_throughput(sinr)
+
+        ### END ###
 
         self.prop_measurements[node_id]['time'].append(self.env.now)
         self.prop_measurements[node_id]['rss'].append(rss)
@@ -256,21 +254,18 @@ class AirInterface:
         self.prop_measurements[packet.node.id]['pkgs_in_air'].append(len(self.packages_in_air))
         self.prop_measurements[packet.node.id]['time_for_pkgs'].append(self.env.now)
 
+        ### START ###
+
         if (packet.noma and not collided):
-            if (self.config["toy_log"]):
-                print(f"TOY_NOMA: ################ AIR INTERFACE calling self.noma_insert({packet.id})")
             self.noma_insert(packet)
 
-        if (collided and self.config["toy_log"]):
-            print(f"TOY_NOMA: ################ AIR INTERFACE: packet {packet.id}) has COLLIDED")
+        ### END ###
 
         return collided
 
-    def noma_insert(self, p_new):
+    ### START ###
 
-        # if (not self.config["noma_conf"]):
-        #     self.packages_in_air_to_noma.append(p_new)
-        #     return
+    def noma_insert(self, p_new):
 
         if (len(self.packages_in_air_to_noma) == 0):
             self.packages_in_air_to_noma.append(p_new)
@@ -285,6 +280,8 @@ class AirInterface:
 
         if (self.config["toy_log"]):
             print(f"TOY_NOMA: ################ AIR INTERFACE: state of self.packages_in_air_to_noma is — {[p.id for p in self.packages_in_air_to_noma]}")
+
+    ### END ###
 
     def plot_packets_in_air(self):
         plt.figure()

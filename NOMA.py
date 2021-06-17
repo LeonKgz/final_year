@@ -1,6 +1,8 @@
 from Gateway import Gateway
 import AirInterface
 
+### START ###
+
 class NOMA:
     def __init__(self, gateway: Gateway, air_interface: AirInterface, env, config):
         self.gateway = gateway
@@ -19,8 +21,7 @@ class NOMA:
                 if (self.config["toy_log"]):
                     print(f"TOY_NOMA: ################ NOMA: calling self.gateway.packet_received_noma({to_process.node.id}-{to_process.id})")
                 yield self.env.process(self.gateway.packet_received_noma(to_process.node, to_process, self.env.now))
-                # self.gateway.packet_received_noma(to_process.node, to_process, self.env.now)
             else:
-                # if (self.config["toy_log"]):
-                #     print(f"TOY_NOMA: ################ NOMA: queue is empty, going to sleep...")
                 yield self.env.timeout(10000)
+
+### END ###

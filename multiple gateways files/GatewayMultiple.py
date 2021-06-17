@@ -6,7 +6,7 @@ from LoRaPacket import UplinkMessage, DownlinkMetaMessage, DownlinkMessage
 from Global import Config
 from LoRaParameters import LoRaParameters
 import pandas as pd
-from NOMA2 import NOMA2
+from NOMAMultiple import NOMA2
 
 
 def required_snr(dr):

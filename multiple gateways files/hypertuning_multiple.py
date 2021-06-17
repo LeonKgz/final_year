@@ -13,7 +13,6 @@ from Global import Config
 from LNS import LNS
 from LoRaParameters import LoRaParameters
 from Location import Location
-from NOMA import NOMA
 from NodeMultiple import Node2
 from SINRModel import SINRModel
 from SNRModel import SNRModel
@@ -543,7 +542,7 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
                 os.mkdir(save_dir_date)
         else:
             # assuming that the NOT local machine is running Linux
-            save_dir = "./plots/"
+            save_dir = "../Plots/"
 
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)

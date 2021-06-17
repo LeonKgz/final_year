@@ -1,5 +1,4 @@
 import math
-
 import numpy as np
 
 class SINRModel:
@@ -12,6 +11,8 @@ class SINRModel:
         self.noise_floor = -174 + 10 * np.log10(125e3)
         ### REUSING INITIALIZATION PARAMETERS FROM SNRModel END ###
 
+    ### START ###
+
     def rss_to_sinr(self, rss: float, total_power):
         # here rss, total_power and noise_floor are all measured in dB
         # converting x to dB => x = 10 * log10(x)
@@ -22,6 +23,8 @@ class SINRModel:
 
     def sinr_to_throughput(self, sinr: float):
         return math.log(sinr + 1, 2)
+
+    ### END ###
 
 def roundup(x, GRID_SIZE):
     x = np.divide(x, GRID_SIZE)

@@ -28,6 +28,7 @@ def plot_time(_env, sim_time):
         print('.', end='', flush=True)
         yield _env.timeout(np.round(sim_time / 10))
 
+### START ###
 
 def save_agents(agents):
     models_dir = "./models"
@@ -52,7 +53,6 @@ def save_agents(agents):
     # pd_dict = pd.DataFrame.from_dict(agent_to_node)
     # pd_dict.to_pickle("./model/agent_to_node")
 
-
 # loads a dicitonary mapping agent model ids to locations of nodes (in a cluster)
 # associated with that model (learning agent)
 def load_agents(clusters="./models/agent_to_node"):
@@ -62,13 +62,13 @@ def load_agents(clusters="./models/agent_to_node"):
 
     # return pd.read_pickle(clusters)
 
+### END ###
 
 def init_nodes(config, agent_to_nodes=None):
     energy_per_bit = 0
     tx_power_mW = {2: 91.8, 5: 95.9, 8: 101.6, 11: 120.8, 14: 146.5}  # measured TX power for each possible TP
     middle = np.round(config["cell_size"] / 2)
     gateway_location = Location(x=middle, y=middle, indoor=False)
-    # plt.scatter(middle, middle, color='red')
     env = simpy.Environment()
     gateway = Gateway(env, gateway_location, config=config)
     nodes = []
@@ -117,6 +117,8 @@ def init_nodes(config, agent_to_nodes=None):
         nodes.append(node)
         location_to_node[(location.x, location.y)] = node
 
+    ### START ###
+
     agents = []
     if (config["training"]):
         if (agent_to_nodes == None):
@@ -126,6 +128,7 @@ def init_nodes(config, agent_to_nodes=None):
             clusters = cluster_nodes(nodes, sector_size=config["sector_size"])
             print("Finished creating clusters\n")
 
+            # Code for building the clusters scatter plot
             # for cluster in clusters.keys():
             #     for node in clusters[cluster]:
             #         plt.scatter(node.location.x, node.location.y, color='blue')
@@ -182,7 +185,6 @@ def init_nodes(config, agent_to_nodes=None):
 
     return nodes, agents, env
 
-
 def run_nodes(nodes, env, days, noma=True):
     # The simulation is kicked off after agents are assigned to respective clusters
     if noma:
@@ -199,17 +201,6 @@ def run_nodes(nodes, env, days, noma=True):
     env.process(plot_time(env, sim_time))
     env.run(until=sim_time)
 
-
-def plot_air_packages(configurations):
-    first_run = True
-    f, axarr = None, None
-
-    for config_cnt, config in enumerate(configurations):
-        simulation_time = config["days"] * 1000 * 60 * 60 * 24
-        nodes, agents, env = init_nodes(config=config)
-        run_nodes(nodes, env, days=config["days"])
-
-
 def health_check(configurations, days):
     print("\n##################          Health check             ###################")
     for config_cnt, config in enumerate(configurations):
@@ -218,9 +209,9 @@ def health_check(configurations, days):
         run_nodes(nodes, env, days=days, noma=config["noma"])
     print("\n##################        Health check OKAY          ###################")
 
+### END ###
 
 def energy_plots(configurations, file_name, save_to_local):
-    # Borrowed code START
     sns.axes_style('white')
     color = [(31, 119, 180), (174, 199, 232), (255, 127, 14), (255, 187, 120),
              (44, 160, 44), (152, 223, 138), (214, 39, 40), (255, 152, 150),
@@ -242,9 +233,7 @@ def energy_plots(configurations, file_name, save_to_local):
         colors[var] = color[j]
         j += 1
 
-    # Borrowed code END
-
-    name = file_name + "_energy_plots"
+    ### START ###
 
     num_plots = len(configurations)
 
@@ -295,80 +284,12 @@ def energy_plots(configurations, file_name, save_to_local):
         with open(file_name, 'wb') as file:
             pickle.dump(results, file, protocol=pickle.HIGHEST_PROTOCOL)
 
-        # results.to_pickle(f"./results/sim_results_" + config["label"])
-
-        # if (save_to_local):
-        #     # assuming that the local machine is running Windows
-        #     now = datetime.datetime.now()
-        #     current_date = now.strftime("%d.%m.%Y")
-        #     current_hour = now.strftime("%H")
-        #     save_dir_date = f"../Plot Diary/{current_date}/"
-        #     save_dir = f"../Plot Diary/{current_date}/{current_hour}/"
-        #     if (not os.path.exists(save_dir_date)):
-        #         os.mkdir(save_dir_date)
-        # else:
-        #     # assuming that the NOT local machine is running Linux
-        #     save_dir = "./plots/"
-        #
-        # if not os.path.exists(save_dir):
-        #     os.mkdir(save_dir)
-        #
-        # save_dir = save_dir + f"{file_name}/"
-        # if not os.path.exists(save_dir):
-        #     os.mkdir(save_dir)
-        #
-        # name = save_dir + name + ".png"
-        # f.savefig(name)
-        # print(f"\nSaved plot {name}")
-
     plt.show()
-
 
 def lload_pickle():
     with open("./results/sim_results.pkl", 'rb') as handle:
         b = pickle.load(handle)
         return b
-
-
-def saved_energy():
-    # Borrowed code START
-    sns.axes_style('white')
-    color = [(31, 119, 180), (174, 199, 232), (255, 127, 14), (255, 187, 120),
-             (44, 160, 44), (152, 223, 138), (214, 39, 40), (255, 152, 150),
-             (148, 103, 189), (197, 176, 213), (140, 86, 75), (196, 156, 148),
-             (227, 119, 194), (247, 182, 210), (127, 127, 127), (199, 199, 199),
-             (188, 189, 34), (219, 219, 141), (23, 190, 207), (158, 218, 229)]
-
-    for i in range(len(color)):
-        r, g, b = color[i]
-        color[i] = (r / 255., g / 255., b / 255.)
-
-    payload_sizes = range(5, 55, 5)
-    path_loss_variances = [0, 5, 7.8, 15, 20]
-
-    i = 0
-    j = 0
-    colors = dict()
-    for var in path_loss_variances:
-        colors[var] = color[j]
-        j += 1
-
-    num_plots = 1
-    f, axarr = plt.subplots(1, 1, sharex=True, sharey=False, figsize=(4, 4))
-
-    results = lload_pickle()
-    for variance in path_loss_variances:
-        axarr.plot(list(payload_sizes),
-                   list(results[variance]),
-                   marker='o',
-                   linestyle='--',
-                   label=('$\sigma_{dB}$: ' + str(variance) + ' (dB)'),
-                   color=colors[variance])
-
-    axarr.legend()
-
-    plt.show()
-
 
 def run_configurations(configurations, file_name, save_to_local, main_theme, progression, rest):
     first_run = True
@@ -815,7 +736,6 @@ def run_configurations(configurations, file_name, save_to_local, main_theme, pro
     save_figures()
     plt.show()
 
-
 # Standard configuration values
 num_nodes = 1000
 cell_size = 1000
@@ -827,11 +747,8 @@ normal_reward = "normal"
 thoughput_reward = "throughput"
 energy_reward = "energy"
 
-
 def generate_config(config):
     standard_body = {
-        "toy_log": False,
-        "toy_logg": False,
         "title": "",
         "file_name": "",
         "label": "",
@@ -919,8 +836,6 @@ config_global = [
             # "locations": locations,
             # "static_locations": True,
             "num_nodes": 10,
-            "toy_log": True,
-            "toy_logg": True,
             # "load": True,
             # "deep": True,
         },
@@ -987,3 +902,4 @@ for i in range(len(config_global)):
     print(
         "\n\n\n#################################################################################################\n\n\n")
 
+### END ###

@@ -1,12 +1,10 @@
 from collections import deque  # circular buffer for storing SNR history for the ADR algorithm
-
 import numpy as np
+import pandas as pd
 
 from LoRaPacket import UplinkMessage, DownlinkMetaMessage, DownlinkMessage
 from Global import Config
 from LoRaParameters import LoRaParameters
-import pandas as pd
-
 
 def required_snr(dr):
     req_snr = 0
@@ -27,10 +25,8 @@ def required_snr(dr):
 
     return req_snr
 
-
 class Gateway:
     SENSITIVITY = {6: -121, 7: -126.5, 8: -129, 9: -131.5, 10: -134, 11: -136.5, 12: -139.5}
-
 
     def __init__(self, env, location, config, fast_adr_on=False, max_snr_adr=True, min_snr_adr=False, avg_snr_adr=False, adr_margin_db=10):
         self.total_distinct_packets_received = 0
@@ -58,13 +54,9 @@ class Gateway:
         self.avg_snr_adr = avg_snr_adr
 
         self.prop_measurements = {}
-
         self.config = config
 
     def packet_received_noma(self, from_node, packet: UplinkMessage, now):
-
-        if (self.config["toy_log"]):
-            print(f"TOY_NOMA: ################ GATEWAY: received packet {packet.node.id}-{packet.id} from NOMA")
 
         downlink_meta_msg = DownlinkMetaMessage()
         downlink_msg = DownlinkMessage(dmm=downlink_meta_msg)
@@ -88,8 +80,6 @@ class Gateway:
             packet.node.weak_nodes_rejected += 1
             downlink_meta_msg.weak_packet = True
             self.uplink_packet_weak.append(packet)
-            if (self.config["toy_log"]):
-                print(f"TOY_NOMA: ################ GATEWAY: received packet {packet.node.id}-{packet.id} is too weak, sending it to the node")
             from_node.noma_downlink(packet, downlink_msg)
 
         self.bytes_received += packet.payload_size
@@ -97,18 +87,11 @@ class Gateway:
 
         # everytime a distinct message is received (i.e. id is diff from previous message
         if from_node.id not in self.last_distinct_packets_received_from:
-            if (self.config["toy_logg"]):
-                print(f"TOY_NOMA: ################ GATEWAY {self} packets received  incremented due to {packet.id}")
             self.distinct_packets_received += 1
         elif self.last_distinct_packets_received_from[from_node.id] != packet.id:
-            if (self.config["toy_logg"]):
-                print(f"TOY_NOMA: ################ GATEWAY {self} packets received  incremented due to {packet.id}")
             self.distinct_packets_received += 1
             self.distinct_bytes_received_from[from_node.id] += packet.payload_size
             self.packet_num_received_from[from_node.id] += 1
-        else:
-            if (self.config["toy_logg"]):
-                print(f"TOY_NOMA: ################ GATEWAY already seen this due to {packet.id}")
 
         self.last_distinct_packets_received_from[from_node.id] = packet.id
 
@@ -169,15 +152,7 @@ class Gateway:
         else:
             downlink_meta_msg.dc_limit_reached = True
 
-        if (self.config["toy_log"]):
-            print(f"TOY_NOMA: ################ GATEWAY: sending packet {packet.node.id}-{packet.id} to its node")
-
-
-
         yield self.env.process(from_node.noma_downlink(packet, downlink_msg))
-        # from_node.noma_downlink(packet, downlink_msg)
-        # from_node.noma_downlink(packet, downlink_msg)
-        # yield self.env.timeout(1)
 
     def packet_received(self, from_node, packet: UplinkMessage, now):
 
@@ -210,12 +185,8 @@ class Gateway:
 
         # everytime a distinct message is received (i.e. id is diff from previous message
         if from_node.id not in self.last_distinct_packets_received_from:
-            if (self.config["toy_logg"]):
-                print(f"TOY_NOMA: ################ GATEWAY {self} packets received  incremented due to {packet.id}")
             self.distinct_packets_received += 1
         elif self.last_distinct_packets_received_from[from_node.id] != packet.id:
-            if (self.config["toy_logg"]):
-                print(f"TOY_NOMA: ################ GATEWAY {self} packets received  incremented due to {packet.id}")
             self.distinct_packets_received += 1
             self.distinct_bytes_received_from[from_node.id] += packet.payload_size
             self.packet_num_received_from[from_node.id] += 1

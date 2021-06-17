@@ -6,7 +6,6 @@ import torch
 import math
 
 from GatewayMultiple import Gateway2
-from NOMA import NOMA
 from EnergyProfile import EnergyProfile
 from Gateway import Gateway
 from Global import Config
@@ -14,7 +13,6 @@ from LoRaPacket import UplinkMessage
 from LoRaPacket import DownlinkMessage
 from LoRaPacket import DownlinkMetaMessage
 from LoRaParameters import LoRaParameters
-from RL_plots import RL_plots
 
 from copy import deepcopy
 

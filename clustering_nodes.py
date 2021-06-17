@@ -1,3 +1,6 @@
+
+### START ###
+
 from Global import Config
 from bisect import bisect_left
 
@@ -17,8 +20,6 @@ def cluster_nodes(nodes, sector_size):
             cluster_centres.append((xs[i], ys[j]))
 
     clusters = {}
-    # for key in cluster_centres:
-    #     clusters[key] = []
 
     for n in nodes:
         # Effectively find the right column and row based on node's X and Y coordinates
@@ -45,8 +46,6 @@ def cluster_nodes_for_agents(nodes, sector_size, agents):
             cluster_centres.append((xs[i], ys[j]))
 
     clusters = {}
-    # for key in cluster_centres:
-    #     clusters[key] = []
 
     for n in nodes:
         # Effectively find the right column and row based on node's X and Y coordinates
@@ -76,3 +75,5 @@ def search_closest(locs, x):
 
     closest = locs[i-1] if (abs(locs[i-1] - x) < abs(locs[i] - x)) else locs[i]
     return closest
+
+### END ###

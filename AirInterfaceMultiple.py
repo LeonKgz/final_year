@@ -2,7 +2,7 @@ import random
 
 import Global
 import PropagationModel
-from Gateway2 import Gateway2
+from GatewayMultiple import Gateway2
 from LNS import LNS
 from Location import Location
 from Gateway import Gateway
@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 
-from Node2 import Node2
+from NodeMultiple import Node2
 from SNRModel import SNRModel
 from SINRModel import SINRModel
 
@@ -316,7 +316,7 @@ class AirInterface2:
     #     total_power_acc = 0
     #
     #     if (packet in self.packages_in_air):
-    #         raise Exception('packet in question is in packages in air (added below) (AirInterface2.py)')
+    #         raise Exception('packet in question is in packages in air (added below) (AirInterfaceMultiple.py)')
     #
     #     for p in self.packages_in_air[best_gateway]:
     #         # convert from dB values

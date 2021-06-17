@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import math
 
-from Gateway2 import Gateway2
+from GatewayMultiple import Gateway2
 from NOMA import NOMA
 from EnergyProfile import EnergyProfile
 from Gateway import Gateway

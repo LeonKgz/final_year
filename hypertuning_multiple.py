@@ -6,15 +6,15 @@ import torch
 import os
 
 import PropagationModel
-from AirInterface2 import AirInterface2
+from AirInterfaceMultiple import AirInterface2
 from EnergyProfile import EnergyProfile
-from Gateway2 import Gateway2
+from GatewayMultiple import Gateway2
 from Global import Config
 from LNS import LNS
 from LoRaParameters import LoRaParameters
 from Location import Location
 from NOMA import NOMA
-from Node2 import Node2
+from NodeMultiple import Node2
 from SINRModel import SINRModel
 from SNRModel import SNRModel
 from agent import LearningAgent

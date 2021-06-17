@@ -1,4 +1,4 @@
-from Gateway2 import Gateway2
+from GatewayMultiple import Gateway2
 from LoRaPacket import UplinkMessage
 
 class LNS:

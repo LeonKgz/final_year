@@ -12,7 +12,6 @@ from LoRaPacket import UplinkMessage
 from LoRaPacket import DownlinkMessage
 from LoRaPacket import DownlinkMetaMessage
 from LoRaParameters import LoRaParameters
-from RL_plots import RL_plots
 
 from copy import deepcopy
 
@@ -20,7 +19,6 @@ from Location import Location
 import pandas as pd
 
 from agent import LearningAgent
-
 
 class NodeState(Enum):
     OFFLINE = auto()
@@ -33,7 +31,6 @@ class NodeState(Enum):
     RADIO_PRE_RX = auto()
     RADIO_POST_RX = auto()
     PROCESS = auto()
-
 
 class Node:
     def __init__(self, node_id, energy_profile: EnergyProfile, lora_parameters, sleep_time, process_time, adr, location,
@@ -100,8 +97,9 @@ class Node:
         # SINR threshold with sub bandwidth 125 kHz from Lina's paper
         self.sinr_table = {7: "-7.5", 8: "-10", 9: "-12.5", 10: "-15", 11: "-18", 12: "-21"}
 
+        ### START ###
+
         self.learning_agent = None
-        # self.rewards = {}
         self.training = training
         self.reward_type = reward_type
 
@@ -153,6 +151,8 @@ class Node:
         self.sleep_counter = 0
         self.curr_uplink_packet = None
         self.curr_downlink_packet = None
+
+        ### END ###
 
     def plot(self, prop_measurements):
         plt.figure()
@@ -229,12 +229,17 @@ class Node:
 
         while True:
             # added also a random wait to accommodate for any timing issues on the node itself
+
+            ### START ###
+
             if (self.training):
                 current_state = self.current_s()
                 # if isinstance(self.learning_agent, DeepLearningAgent):
                 #     current_state = current_state.to(self.learning_agent.device)
                 action = self.learning_agent.choose_next_action(current_state, self.id)
                 self.take_action(action)
+
+            ### END ###
 
             random_wait = np.random.randint(0, Config.MAX_DELAY_BEFORE_SLEEP_MS)
             yield self.env.timeout(random_wait)
@@ -267,11 +272,15 @@ class Node:
             # if Config.PRINT_ENABLED:
             #     print('{}: DONE sending'.format(self.id))
 
+            ### START ###
+
             reward = self.compute_reward(curr_p=packet)
             if (self.training and not self.config["load"]):
                 next_state = self.current_s()
                 transition = (current_state, action, reward, next_state)
                 self.learning_agent.train_q(transition, self.id)
+
+            ### END ###
 
             self.num_unique_packets_sent += 1  # at the end to be sure that this packet was tx
 
@@ -290,6 +299,9 @@ class Node:
 
         while True:
             # added also a random wait to accommodate for any timing issues on the node itself
+
+            ### START ###
+
             if (self.training):
                 current_state = self.current_s()
                 # if isinstance(self.learning_agent, DeepLearningAgent):
@@ -297,11 +309,11 @@ class Node:
                 action = self.learning_agent.choose_next_action(current_state, self.id)
                 self.take_action(action)
 
+            ### END ###
+
             random_wait = np.random.randint(0, Config.MAX_DELAY_BEFORE_SLEEP_MS)
             yield self.env.timeout(random_wait)
 
-            if (self.config["toy_log"]):
-                print(f"NODE {self.id} going to sleep")
             yield self.env.process(self.sleep())
 
             yield self.env.process(self.processing())
@@ -322,14 +334,16 @@ class Node:
             # if Config.PRINT_ENABLED:
             #     print('{}: DONE sending'.format(self.id))
 
+            ### START ###
+
             reward = self.compute_reward(curr_p=packet)
             if (self.training and not self.config["load"]):
                 next_state = self.current_s()
                 transition = (current_state, action, reward, next_state)
                 self.learning_agent.train_q(transition, self.id)
 
-            if (self.config["toy_logg"]):
-                print(f"TOY_NOMA: ################ NODE {self.id} packet {packet.id} is incremented now")
+            ### END ###
+
             self.num_unique_packets_sent += 1  # at the end to be sure that this packet was tx
 
     # [----JOIN----]        [rx1]
@@ -396,8 +410,6 @@ class Node:
         if self.time_off[channel] > self.env.now:
             # wait for certaint time to respect duty cycle
             wait = self.time_off[channel] - self.env.now
-            if (self.config["toy_log"]):
-                print(f"NODE {self.id} going to sleep due to time off")
             self.change_state(NodeState.SLEEP)
             self.total_wait_time_because_dc += wait
             yield self.env.timeout(wait)
@@ -410,8 +422,6 @@ class Node:
         #            TX             #
         # fixed energy overhead
         collided = yield self.env.process(self.send_tx(packet))
-        if (self.config["toy_log"] and collided):
-            print(f"TOY_NOMA: ################ NODE {self.id} packet {packet.id} COLLIDED")
         # print('\t Our packet has collided (2)')
 
         #      Received at BS      #
@@ -445,10 +455,6 @@ class Node:
         if self.time_off[channel] > self.env.now:
             # wait for certaint time to respect duty cycle
             wait = self.time_off[channel] - self.env.now
-
-            if (self.config["toy_log"]):
-                print(f"NODE {self.id} going to sleep due to time off")
-
             self.change_state(NodeState.SLEEP)
             self.total_wait_time_because_dc += wait
             yield self.env.timeout(wait)
@@ -470,6 +476,8 @@ class Node:
             self.num_collided += 1
             # downlink_message = None
 
+    ### START ###
+
     # This function is called by the gateway, once it finishes processing the respective uplink message
     def noma_downlink(self, packet: UplinkMessage, downlink_message: DownlinkMessage):
         #      Received at BS      #
@@ -482,6 +490,8 @@ class Node:
             yield self.env.process(self.dl_message_lost())
         else:
             yield self.env.process(self.process_downlink_message(downlink_message, packet))
+
+    ### END ###
 
     def process_downlink_message(self, downlink_message, uplink_message):
         changed = False
@@ -633,17 +643,7 @@ class Node:
             else:
                 temp_lora_param = deepcopy(packet.lora_param)
 
-                # ### PROJECT CODE START
-                # curr_val = self.lora_param.dr
-                # ### PROJECT CODE END
-
-                sf_result = temp_lora_param.change_dr_to(3)
-                # self.counts["Spreading Factor"][sf_result] += 1
-
-                # ### PROJECT CODE START
-                # if (self.lora_param.dr != curr_val):
-                #     raise Exception("DR is changed around the learning process (not through take_action() call)")
-                # ### PROJECT CODE END
+                temp_lora_param.change_dr_to(3)
 
                 rx_time = LoRaPacket.time_on_air(12, temp_lora_param)
                 rx_energy = (rx_time / 1000) * self.energy_profile.rx_power['rx_lna_off_mW']
@@ -766,10 +766,12 @@ class Node:
             return 0
         return self.total_energy_consumed() / (self.packets_sent * self.payload_size * 8)
 
-    # PROJECT CODE START
+    ### START ###
+
     def get_value_per_bit(self, val):
         return val / (self.packets_sent * self.payload_size * 8)
-    # PROJECT CODE END
+
+    ### END ###
 
     def transmit_related_energy_per_bit(self) -> float:
         return self.transmit_related_energy_consumed() / (self.packets_sent * self.payload_size * 8)
@@ -815,9 +817,6 @@ class Node:
         }
         return pd.Series(series)
 
-    def assign_learning_agent(self, agent: LearningAgent):
-        self.learning_agent = agent
-
     @staticmethod
     def get_simulation_data_frame(nodes: list) -> pd.DataFrame:
         column_names = ['WaitTimeDC', 'NoDLReceived', 'UniquePackets', 'TotalPackets', 'CollidedPackets',
@@ -848,7 +847,10 @@ class Node:
         en_list = np.array(en_list)
         return np.mean(en_list), np.std(en_list)
 
-    # Reinforcement Learning functionality
+    ### START ###
+
+    def assign_learning_agent(self, agent: LearningAgent):
+        self.learning_agent = agent
 
     # utility function for slow traversal of action space making sure that
     # LoRa parameters stay within specified ranges/limits
@@ -911,7 +913,6 @@ class Node:
             ### Commented out code assuming minimal viable state as [tp, sf, channel] ###
 
             # # This is the absolute minimum state space that makes sense (equivalent to action space)
-            # minimal_state = [tp, sf, channel]
             minimal_state = []
 
             if ("tp" in self.state_space):
@@ -925,7 +926,6 @@ class Node:
             if ("channel" in self.state_space):
                 # Commenting out trying out smaller values for frequency state to improve learning
                 channel = self.lora_param.freq
-                # channel = LoRaParameters.DEFAULT_CHANNELS.index(self.lora_param.freq)
                 minimal_state.append(channel)
 
             if ("sinr" in self.state_space):
@@ -966,21 +966,11 @@ class Node:
                     throughput = 0
                 minimal_state.append(throughput)
 
-            # return torch.Tensor([sf, tp, channel, sinr, energy])
             ret = torch.tensor(minimal_state, dtype=torch.float)
             ret = ret.to(self.learning_agent.device)
-            # ret = ret
             return ret
 
-            # return torch.Tensor([sf, tp, channel, sinr, rss, packet_id, energy, num_pkt])
-
     def compute_reward(self, curr_p: UplinkMessage):
-        # Commented out trade-off between 'network reliability and energy efficiency' version of the reward function
-        # latest_sinr = self.air_interface.prop_measurements[self.id]['sinr'][-1]
-        # threshold = float(self.sinr_table[self.lora_param.sf])
-        # delta = 1 if latest_sinr >= threshold else 0
-        # phi = self.tradeoff
-        # reward = delta * phi + delta * (1 - phi) * latest_throughput / self.energy_value
 
         latest_throughput = self.air_interface.prop_measurements[self.id]['throughput'][-1]
         latest_sinr = self.air_interface.prop_measurements[self.id]['sinr'][-1]
@@ -1006,10 +996,6 @@ class Node:
         self.rl_measurements["rss"][self.env.now] = latest_rss
         self.rl_measurements["pkgs_in_air"][self.env.now] = len(self.air_interface.packages_in_air)
 
-        # self.rl_measurements["E_transmitting"][self.env.now] = self.get_value_per_bit(self.energy_tracking[NodeState(NodeState.TX).name])
-        # self.rl_measurements["E_receiving"][self.env.now] = self.get_value_per_bit(self.energy_tracking[NodeState(NodeState.RX).name])
-        # self.rl_measurements["E_sleeping"][self.env.now] = self.get_value_per_bit(self.energy_tracking[NodeState(NodeState.SLEEP).name])
-        # self.rl_measurements["E_processing"][self.env.now] = self.get_value_per_bit(self.energy_tracking[NodeState(NodeState.PROCESS).name])
         self.rl_measurements["E_transmitting"][self.env.now] = self.energy_tracking[NodeState(NodeState.TX).name]
         self.rl_measurements["E_receiving"][self.env.now] = self.energy_tracking[NodeState(NodeState.RX).name]
         self.rl_measurements["E_sleeping"][self.env.now] = self.energy_tracking[NodeState(NodeState.SLEEP).name]
@@ -1024,14 +1010,9 @@ class Node:
         self.rl_measurements["sleep_times"][self.env.now] = self.sleep_time
         self.rl_measurements["sleep_counter"][self.env.now] = self.sleep_counter
 
-        # if (self.num_unique_packets_set == 0 or self.id not in self.base_station.packet_num_received_from):
-        #     der = 0
-        # else:
-        #     der = (self.base_station.packet_num_received_from[self.id] / self.num_unique_packets_sent) * 100
-        #
-        # self.rl_measurements["der"][self.env.now] = der
-
         return reward
 
     def get_mean_throughput(self):
         return np.m
+
+### END ###
